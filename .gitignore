@@ -10,3 +10,7 @@ Thumbs.db
 
 # Claude Code 本机设置
 .claude/settings.local.json
+
+# 自测截图与调试
+.shots/
+.debug/

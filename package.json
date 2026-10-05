@@ -1,0 +1,22 @@
+{
+  "name": "play-entry",
+  "version": "0.1.0",
+  "private": true,
+  "description": "铭刻 · 小铭的小游戏卡带库（play.xiaoming6680.link）",
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host 127.0.0.1",
+    "check": "node scripts/check-data.mjs && tsc --noEmit",
+    "build": "node scripts/check-data.mjs && node scripts/build.mjs",
+    "preview": "vite preview --host 127.0.0.1 --outDir dist",
+    "shoot": "node scripts/shoot.mjs"
+  },
+  "devDependencies": {
+    "@fontsource/jetbrains-mono": "^5.3.0",
+    "@types/three": "^0.186.0",
+    "playwright-core": "^1.63.0",
+    "three": "^0.186.1",
+    "typescript": "~5.9",
+    "vite": "^8.3.2"
+  }
+}
