@@ -1,0 +1,73 @@
+{
+  "site": {
+    "brand": "铭刻",
+    "brandEn": "MINGKE",
+    "subtitle": "CARTRIDGE ARCHIVE",
+    "device": "XM-6680",
+    "codePrefix": "MK",
+    "title": "铭刻 · 小铭的小游戏卡带库",
+    "description": "一盒一个小游戏。翻找、抽出、看玻璃变清晰，然后插进去玩。",
+    "url": "https://play.xiaoming6680.link",
+    "author": "小铭",
+    "repo": "https://github.com/xiaoming6680/play-entry",
+    "links": [],
+    "blank": {
+      "enabled": true,
+      "title": "下一盒",
+      "tagline": "空白卡带，还没有刻录任何东西",
+      "intro": "下一个游戏正在构思。做好了，它会被刻进这盒卡带里。",
+      "teaser": ""
+    }
+  },
+  "games": [
+    {
+      "id": "beat",
+      "title": "节拍幸存者",
+      "titleEn": "BEAT SURVIVOR",
+      "url": "https://beat.xiaoming6680.link",
+      "tagline": "武器即乐器的割草游戏，一局打完就是一首歌",
+      "intro": "每件武器都是一件乐器，所有攻击都卡在节拍上发射。开局只有一个底鼓，越升级音乐越满；8 分钟打完，你的 build 就是一首歌。",
+      "genre": ["割草", "节奏", "动作"],
+      "session": "一局约 8 分钟",
+      "controls": "键盘 WASD / 方向键",
+      "device": "desktop",
+      "status": "dev",
+      "color": "#FF2E88",
+      "color2": "#22E5FF",
+      "core": "beat",
+      "coreOptions": { "bpm": 128 }
+    },
+    {
+      "id": "stay",
+      "title": "别关我",
+      "titleEn": "DON'T CLOSE ME",
+      "url": "https://stay.xiaoming6680.link",
+      "tagline": "一个不想被关掉的网页，谜题都要对浏览器本身动手",
+      "intro": "这个网页有自己的性格，而且不想被你关掉。拉窗口、切标签、复制粘贴、什么都不做……每一关都得对浏览器本身动手才解得开。",
+      "genre": ["解谜", "打破第四面墙"],
+      "session": "30–60 分钟一次性体验",
+      "controls": "鼠标 + 键盘，外加你的浏览器",
+      "device": "desktop",
+      "status": "dev",
+      "color": "#F4F1EA",
+      "color2": "#FF8FA3",
+      "core": "stay"
+    },
+    {
+      "id": "dot",
+      "title": "从一个点开始",
+      "titleEn": "FROM A DOT",
+      "url": "https://dot.xiaoming6680.link",
+      "tagline": "网页画风从文字终端一路进化到 3D 的放置游戏",
+      "intro": "开局只有一个点和一个按钮。每推进一个阶段，整个网页的画质就升级一次：终端、矢量、8-bit、16-bit、辉光，最后是 3D。",
+      "genre": ["放置", "增量", "进化"],
+      "session": "约 1–2 小时，有结局",
+      "controls": "鼠标",
+      "device": "desktop",
+      "status": "dev",
+      "color": "#3BFF6E",
+      "color2": "#FFD23B",
+      "core": "dot"
+    }
+  ]
+}

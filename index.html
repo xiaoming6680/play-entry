@@ -1,0 +1,190 @@
+<!doctype html>
+<html lang="zh-CN" data-theme="light">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+    <!--@meta-->
+    <meta name="theme-color" content="#E9EBEE" media="(prefers-color-scheme: light)">
+    <meta name="theme-color" content="#0B0D10" media="(prefers-color-scheme: dark)">
+    <meta name="format-detection" content="telephone=no">
+    <link rel="icon" href="./favicon.svg" type="image/svg+xml">
+    <link rel="apple-touch-icon" href="./apple-touch-icon.png">
+    <script>
+      // 首帧之前定好明暗与是否跳过开场，避免闪一下
+      (function () {
+        var d = document.documentElement, t = null;
+        try { t = localStorage.getItem("mk-theme"); } catch (e) {}
+        if (t !== "light" && t !== "dark") t = matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+        d.setAttribute("data-theme", t);
+        var skip = false;
+        try { skip = !!sessionStorage.getItem("mk-booted"); } catch (e) {}
+        if (/[?&]boot\b/.test(location.search)) skip = false;
+        if (/[?&](shot|skipboot)\b/.test(location.search) || matchMedia("(prefers-reduced-motion: reduce)").matches) skip = true;
+        if (skip) d.classList.add("skip-boot");
+      })();
+    </script>
+    <style>
+      :root{--bg:#E9EBEE;--bg2:#F4F5F7;--ink:#0F1216;--ink2:#626A74;--line:#B8BEC6;--accent:#FF3B2F;--mono:"JBM",ui-monospace,"SF Mono",Menlo,Consolas,"Roboto Mono",monospace;--sans:"PingFang SC","HarmonyOS Sans SC","MiSans","Noto Sans CJK SC","Source Han Sans SC","Microsoft YaHei",system-ui,sans-serif}
+      [data-theme=dark]{--bg:#0B0D10;--bg2:#13171C;--ink:#E8EBEE;--ink2:#8B939D;--line:#2B3139;--accent:#FF4B3E}
+      html,body{margin:0;height:100%;background:var(--bg);color:var(--ink);font-family:var(--sans)}
+      body{background:linear-gradient(var(--bg2),var(--bg) 60%);overflow:hidden}
+      .boot{position:fixed;inset:0;z-index:50;background:#060708;color:#E8EBEE;font-family:var(--sans);transition:opacity .7s ease,visibility .7s;-webkit-user-select:none;user-select:none}
+      .skip-boot .boot{display:none}
+      .boot.morph{background:transparent}
+      .boot.out{opacity:0;visibility:hidden;pointer-events:none}
+      .op-c{position:absolute;inset:0;width:100%;height:100%}
+      .op-tc,.op-dev{position:absolute;top:calc(22px + env(safe-area-inset-top,0px));font:600 10.5px/1 var(--mono);letter-spacing:.16em;color:#8B939D;display:flex;align-items:center;gap:8px;transition:opacity .4s}
+      .op-tc{left:24px}.op-dev{right:24px}
+      .op-dot{width:7px;height:7px;border-radius:50%;background:#FF3B2F;animation:mk-blink 1.2s steps(2,jump-none) infinite}
+      @keyframes mk-blink{50%{opacity:.15}}
+      .op-gate{position:absolute;inset:0;display:grid;place-content:center;justify-items:center;gap:18px;opacity:0;transition:opacity .45s ease,transform .6s cubic-bezier(.2,.8,.2,1)}
+      .boot.run .op-gate{opacity:1}
+      .boot.on .op-gate{opacity:0;transform:scale(.94);pointer-events:none}
+      .op-power{position:relative;width:96px;height:96px;border-radius:50%;border:1.5px solid rgba(232,235,238,.22);background:radial-gradient(closest-side,rgba(255,59,47,.14),transparent);color:#FF3B2F;display:grid;place-items:center;cursor:pointer;padding:0;font:inherit}
+      .op-power::before{content:"";position:absolute;inset:-1.5px;border-radius:50%;border:1.5px solid #FF3B2F;animation:op-ring 2.2s cubic-bezier(.2,.8,.2,1) infinite}
+      .op-power svg{width:34px;height:34px;fill:none;stroke:currentColor;stroke-width:2.2;stroke-linecap:round}
+      @keyframes op-ring{0%{transform:scale(1);opacity:.9}100%{transform:scale(1.55);opacity:0}}
+      .op-hint{font-size:15px;font-weight:600;letter-spacing:.32em;padding-left:.32em}
+      .op-hint small{margin-left:.7em;font:500 10px/1 var(--mono);letter-spacing:.14em;color:#8B939D}
+      .op-mute{font:inherit;font-size:12.5px;color:#8B939D;background:none;border:0;padding:10px 14px;cursor:pointer;text-decoration:underline dotted;text-underline-offset:4px}
+      .op-load{width:120px;height:1px;background:rgba(232,235,238,.15);overflow:hidden;transition:opacity .4s}
+      .op-load i{display:block;height:100%;background:#E8EBEE;transform-origin:left;transform:scaleX(var(--p,.06));transition:transform .3s}
+      .boot.ready .op-load{opacity:0}
+      .op-brand{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;gap:30px;pointer-events:none}
+      .op-mark{width:86px;height:102px;flex:none}
+      .op-word{display:grid;gap:8px;min-width:220px}
+      .op-word b{font-size:52px;font-weight:800;line-height:1;letter-spacing:.06em;opacity:0;-webkit-mask-image:linear-gradient(#000 calc(var(--scan,0)*130% - 30%),transparent calc(var(--scan,0)*130%));mask-image:linear-gradient(#000 calc(var(--scan,0)*130% - 30%),transparent calc(var(--scan,0)*130%))}
+      .op-word i{font:normal 600 11px/1 var(--mono);letter-spacing:.22em;opacity:0;transform:translateY(6px);transition:opacity .5s .25s,transform .6s .25s}
+      .op-word em{font:normal 500 11px/1 var(--mono);letter-spacing:.08em;color:#8B939D;opacity:0;transition:opacity .5s .45s}
+      .boot.word .op-word b{opacity:1}.boot.word .op-word i{opacity:1;transform:none}.boot.word .op-word em{opacity:1}
+      .boot.morph .op-word,.boot.morph .op-log,.boot.morph .op-tc,.boot.morph .op-dev,.boot.morph .op-skip,.boot.morph .op-snd{opacity:0;transition:opacity .3s}
+      .op-word{transition:opacity .3s}
+      .op-log{position:absolute;left:24px;bottom:calc(22px + env(safe-area-inset-bottom,0px));display:grid;gap:7px;font:500 10.5px/1 var(--mono);letter-spacing:.08em;color:#8B939D}
+      .op-log div{opacity:0}
+      .boot.on .op-log div{animation:mk-up .35s forwards}
+      .boot.on .op-log div:nth-child(2){animation-delay:.35s}.boot.on .op-log div:nth-child(3){animation-delay:.7s;color:#E8EBEE}
+      @keyframes mk-up{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
+      .op-wait{position:absolute;left:50%;bottom:22%;transform:translateX(-50%);font-size:12.5px;letter-spacing:.2em;color:#8B939D;opacity:0;transition:opacity .4s}
+      .boot.wait .op-wait{opacity:1}
+      .op-snd,.op-skip{position:absolute;bottom:calc(16px + env(safe-area-inset-bottom,0px));font:inherit;font-size:12.5px;color:#C9CED4;background:rgba(232,235,238,.06);border:1px solid rgba(232,235,238,.18);border-radius:99px;padding:9px 16px;cursor:pointer;opacity:0;pointer-events:none;transition:opacity .4s}
+      .op-skip{right:20px}.op-snd{left:50%;transform:translateX(-50%)}
+      .boot.on .op-skip{opacity:1;pointer-events:auto}
+      .boot.on:not(.snd) .op-snd{opacity:1;pointer-events:auto}
+      @media (max-width:560px){.op-dev{display:none}.op-brand{flex-direction:column;gap:22px}.op-word{justify-items:center;text-align:center}.op-mark{width:70px;height:83px}.op-word b{font-size:42px}.op-log{display:none}}
+      .ns{max-width:560px;margin:12vh auto;padding:0 20px;line-height:1.7}.ns li{margin:14px 0}.ns a{color:inherit}.ns span{font-size:12px;color:var(--accent)}
+    </style>
+    <link rel="stylesheet" href="./src/styles/main.css">
+    <script type="module" src="./src/main.ts"></script>
+  </head>
+  <body>
+    <div id="app" class="app" data-mode="boot">
+      <div id="stage" class="stage"></div>
+      <div class="aura" id="aura" aria-hidden="true"><i></i><i></i></div>
+
+      <div class="hud">
+        <header class="hud-top">
+          <a class="brand" id="brand" href="./" aria-label="{{site.brand}}，回到开头" draggable="false">
+            <svg class="brand-mark" viewBox="0 0 40 46" aria-hidden="true">
+              <path class="o" d="M7 4H30L36 10V39Q36 42 33 42H7Q4 42 4 39V7Q4 4 7 4Z"/>
+              <path class="l" d="M10 35.5H19"/>
+              <circle class="c" cx="20" cy="19" r="4.6"/>
+            </svg>
+            <span class="brand-txt">
+              <b>{{site.brand}}</b>
+              <i>{{site.brandEn}} · {{site.subtitle}}</i>
+            </span>
+          </a>
+          <div class="rec" aria-hidden="true"><span class="rec-dot"></span>REC <span id="rec-time">00:00:00</span><span class="rec-dev">· {{site.device}}</span></div>
+          <nav class="tools" aria-label="设置">
+            <button type="button" class="tool" id="btn-sound" aria-pressed="true" title="声音"><svg viewBox="0 0 20 20" aria-hidden="true"><path class="f" d="M3 7.5h3l4-3.5v12l-4-3.5H3z"/><path class="on" d="M13 7a4 4 0 0 1 0 6M15.2 4.8a7 7 0 0 1 0 10.4"/><path class="off" d="M13.5 7.5l5 5M18.5 7.5l-5 5"/></svg><span class="tool-lbl">声音</span></button>
+            <button type="button" class="tool" id="btn-theme" title="明暗"><svg viewBox="0 0 20 20" aria-hidden="true"><circle cx="10" cy="10" r="6.5"/><path class="f" d="M10 3.5a6.5 6.5 0 0 1 0 13z"/></svg><span class="tool-lbl">明暗</span></button>
+            <button type="button" class="tool" id="btn-about" title="关于"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M5 3h8l3 3v11H5z"/><path d="M8.5 9.5h3M10 9.5v4.5"/><circle class="f" cx="10" cy="6.6" r=".9"/></svg><span class="tool-lbl">关于</span></button>
+          </nav>
+        </header>
+
+        <div class="vf" id="vf" aria-hidden="true">
+          <i class="vf-c tl"></i><i class="vf-c tr"></i><i class="vf-c bl"></i><i class="vf-c br"></i>
+          <span class="vf-tag" id="vf-tag">SEL</span>
+        </div>
+
+        <section class="panel" id="panel" aria-live="polite">
+          <div class="p-meta"><span class="p-code" id="p-code">MK-01</span><span class="p-sep">/</span><span id="p-kind">卡带档案</span><span class="p-led" id="p-led"></span></div>
+          <h1 class="p-title" id="p-title">&nbsp;</h1>
+          <div class="p-en" id="p-en">&nbsp;</div>
+          <p class="p-tag" id="p-tag">&nbsp;</p>
+          <div class="p-chips" id="p-chips"></div>
+          <div class="p-detail" id="p-detail"><div class="p-detail-in">
+            <dl class="p-fields" id="p-fields"></dl>
+            <p class="p-intro" id="p-intro"></p>
+          </div></div>
+          <div class="p-actions">
+            <button type="button" class="btn primary" id="btn-main"><span class="btn-dot"></span><span id="btn-main-lbl">读取卡带</span><kbd>↵</kbd></button>
+            <button type="button" class="btn ghost" id="btn-copy">复制链接</button>
+            <button type="button" class="btn ghost" id="btn-back">返回<kbd>Esc</kbd></button>
+          </div>
+          <p class="p-note" id="p-note"></p>
+        </section>
+
+        <div class="counter" id="counter">
+          <div class="c-label">SLOT / 卡位</div>
+          <div class="c-num"><span id="c-cur">01</span><span class="c-sl">/</span><span id="c-tot">04</span></div>
+          <div class="c-ticks" id="c-ticks"></div>
+        </div>
+
+        <div class="hint" id="hint"></div>
+        <footer class="hud-foot"><span id="tempo"></span><span id="clock">00:00:00</span><span class="foot-sep">·</span><span>© {{site.author}} 2026</span></footer>
+
+        <div class="slot" id="slot" aria-hidden="true"><i></i></div>
+        <div class="term" id="term" aria-live="polite"></div>
+        <div class="whisper" id="whisper" aria-live="polite"></div>
+        <div class="toast" id="toast" role="status"></div>
+      </div>
+
+      <dialog class="about" id="about" aria-labelledby="about-h">
+        <div class="ab-in">
+          <div class="ab-head"><h2 id="about-h">关于这座卡带库</h2><button type="button" class="ab-x" id="about-close" aria-label="关闭">×</button></div>
+          <p>这里是{{site.author}}所有网页小游戏的入口。每个游戏是一盒玻璃卡带：翻找、抽出、读取，再插进去开玩。还在开发的游戏，卡带亮着红灯。</p>
+          <div class="ab-set">
+            <div class="ab-row"><span>画面</span><span class="seg" id="seg-render"><button type="button" data-v="auto">自动</button><button type="button" data-v="3d">3D</button><button type="button" data-v="2d">2D</button></span></div>
+            <div class="ab-row"><span>明暗</span><span class="seg" id="seg-theme"><button type="button" data-v="auto">跟随系统</button><button type="button" data-v="light">雾</button><button type="button" data-v="dark">夜</button></span></div>
+            <div class="ab-row"><span>声音</span><span class="seg" id="seg-sound"><button type="button" data-v="on">开</button><button type="button" data-v="off">关</button></span></div>
+          </div>
+          <h3>操作</h3>
+          <p class="ab-keys">↑ ↓ / 滚轮 / 拖动：翻找　Enter：读取 · 插入　Esc：返回<br>手机：上下滑翻找，轻点卡带读取</p>
+          <h3>致谢与许可</h3>
+          <ul class="ab-credits">
+            <li>卡带阵列、抽取与磨砂解密的交互思路借鉴自 <a href="https://github.com/LBEILC/RhineLabUI" target="_blank" rel="noopener">RhineLabUI</a>；部分运动与手势代码改编自其源码（Copyright (c) 2026 LBEILC，<a href="./licenses/RhineLabUI-MIT.txt" target="_blank">MIT License</a>）。品牌、卡带模型、配色、声音与文案为本站原创。</li>
+            <li>等宽字体 JetBrains Mono（<a href="./licenses/JetBrainsMono-OFL.txt" target="_blank">SIL OFL 1.1</a>）。3D 渲染 three.js（MIT）。所有声音由浏览器现场合成。</li>
+            <li>源码：<a href="{{site.repo}}" target="_blank" rel="noopener">{{site.repo}}</a></li>
+          </ul>
+          <p class="ab-egg">听说有一串很老的按键，能翻出一盒不在架子上的卡带。</p>
+        </div>
+      </dialog>
+
+      <canvas id="launch" class="launch" aria-hidden="true"></canvas>
+    </div>
+
+    <div id="boot" class="boot">
+      <canvas class="op-c" aria-hidden="true"></canvas>
+      <div class="op-tc" aria-hidden="true"><span class="op-dot"></span>REC <span id="op-time">00:00:00:00</span></div>
+      <div class="op-dev" aria-hidden="true">{{site.device}} · CARTRIDGE SYSTEM</div>
+      <div class="op-gate">
+        <button type="button" class="op-power" id="op-power" aria-label="开机（会播放声音）">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v8"/><path d="M6.3 6.6a8 8 0 1 0 11.4 0"/></svg>
+        </button>
+        <div class="op-hint">轻触开机<small>有声音</small></div>
+        <button type="button" class="op-mute" id="op-mute">静音进入</button>
+        <div class="op-load" aria-hidden="true"><i id="boot-bar"></i></div>
+      </div>
+      <div class="op-brand" aria-hidden="true">
+        <div class="op-mark"></div>
+        <div class="op-word"><b>{{site.brand}}</b><i>{{site.brandEn}} · {{site.subtitle}}</i><em>play.xiaoming6680.link</em></div>
+      </div>
+      <div class="op-log" aria-hidden="true"><div>{{site.device}} SYSTEM ··········· OK</div><div>CARTRIDGE SLOTS ·········· READY</div><div>正在接入卡带库</div></div>
+      <div class="op-wait" aria-hidden="true">正在接入卡带库…</div>
+      <button type="button" class="op-snd">开启声音</button>
+      <button type="button" class="op-skip">跳过 <span aria-hidden="true">▸▸</span></button>
+    </div>
+    <!--@noscript-->
+  </body>
+</html>
