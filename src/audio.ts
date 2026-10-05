@@ -62,86 +62,83 @@ export class Sound {
     if (this.ctx.state === "suspended") this.ctx.resume().catch(() => {});
   }
 
-  // ———————————————— 开场 ————————————————
-  /** 开机：一声上扬的电子音 + 一点电流声 */
+  // ———————————————— 开场（克制：气息、笔声、单音铃、空气、低频暖垫） ————————————————
+  /** 开始：一口很轻的气息 + 一个柔和的低音 */
   opPowerOn() {
     if (!this.ready) return;
     const t = this.ctx!.currentTime;
-    this.osc("sine", 90, t, 0.5, 0.18, this.sfx!, 520, 0.01);
-    this.osc("triangle", 1200, t + 0.12, 0.25, 0.03, this.sfx!, 2400);
-    this.noise(t, 0.35, 0.03, "bandpass", 3000, this.sfx!, 9000, 2);
+    this.noise(t, 0.9, 0.012, "bandpass", 700, this.sfx!, 2200, 0.8);
+    this.osc("sine", 220, t, 1.1, 0.025, this.sfx!, 330, 0.18);
   }
-  /** 激光刻字：一段随时间扫频的嘶声 + 零星噼啪 */
+  /** 描线：一层几乎听不见的五度和声，跟着笔尖走完 */
   opLaser(dur: number) {
     if (!this.ready) return;
     const ctx = this.ctx!;
     const t = ctx.currentTime;
-    this.noise(t, dur, 0.05, "bandpass", 2400, this.sfx!, 5200, 6);
-    const o = ctx.createOscillator(),
-      g = ctx.createGain();
-    o.type = "sawtooth";
-    o.frequency.setValueAtTime(880, t);
-    o.frequency.linearRampToValueAtTime(1320, t + dur);
+    const g = ctx.createGain();
     g.gain.setValueAtTime(0.0001, t);
-    g.gain.exponentialRampToValueAtTime(0.008, t + 0.05);
-    g.gain.setValueAtTime(0.008, t + dur - 0.05);
-    g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
-    o.connect(g).connect(this.sfx!);
-    o.start(t);
-    o.stop(t + dur + 0.05);
-    for (let i = 0; i < 14; i++) this.noise(t + Math.random() * dur, 0.012, 0.06 * Math.random(), "highpass", 5000, this.sfx!);
+    g.gain.exponentialRampToValueAtTime(0.014, t + dur * 0.4);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + dur + 0.6);
+    g.connect(this.sfx!);
+    for (const f of [440, 659.3]) {
+      const o = ctx.createOscillator();
+      o.type = "sine";
+      o.frequency.value = f;
+      o.connect(g);
+      o.start(t);
+      o.stop(t + dur + 0.7);
+    }
+    this.noise(t, dur, 0.004, "highpass", 6500, this.sfx!);
   }
-  /** 红点落下：一声清亮的"叮" */
+  /** 红点落下：一声干净的单音铃 */
   opDing() {
     if (!this.ready) return;
     const t = this.ctx!.currentTime;
-    [1318.5, 2637, 3951].forEach((f, i) => this.osc("sine", f, t, 1.2 / (i + 1), 0.07 / (i + 1), this.sfx!));
-    this.osc("sine", 110, t, 0.2, 0.12, this.sfx!, 60);
+    this.osc("sine", 1318.5, t, 2.4, 0.05, this.sfx!, undefined, 0.006);
+    this.osc("sine", 2637, t, 1.2, 0.01, this.sfx!, undefined, 0.006);
+    this.osc("sine", 3951, t, 0.6, 0.004, this.sfx!, undefined, 0.006);
   }
-  /** 「入盒」：向上扫的气流 */
+  /** 入盒：一阵柔和的空气 */
   opWhoosh() {
     if (!this.ready) return;
     const t = this.ctx!.currentTime;
-    this.noise(t, 0.7, 0.09, "bandpass", 300, this.sfx!, 4200, 1.4);
+    this.noise(t, 1.1, 0.022, "bandpass", 380, this.sfx!, 1500, 0.9);
   }
-  /** 闪光：低频"咚"+ 噪声爆开 */
+  /** 拉远开始：低频暖垫，慢起慢落 */
   opBoom() {
     if (!this.ready) return;
     const t = this.ctx!.currentTime;
-    this.osc("sine", 72, t, 1.4, 0.5, this.sfx!, 32, 0.004);
-    this.osc("triangle", 144, t, 0.5, 0.12, this.sfx!, 60);
-    this.noise(t, 0.9, 0.14, "lowpass", 3000, this.sfx!, 200);
+    this.osc("sine", 55, t, 3.2, 0.09, this.sfx!, undefined, 0.35);
+    this.osc("sine", 110, t, 2.6, 0.03, this.sfx!, undefined, 0.4);
   }
-  /** 拉远：一层慢慢打开的和声垫音 + 越来越密的玻璃声（卡带一盒盒亮起来） */
+  /** 拉远：一层慢慢打开的三角波和声 + 零星几声很轻的玻璃声 */
   opSwell(dur: number) {
     if (!this.ready) return;
     const ctx = this.ctx!;
     const t = ctx.currentTime;
     const f = ctx.createBiquadFilter();
     f.type = "lowpass";
-    f.frequency.setValueAtTime(300, t);
-    f.frequency.exponentialRampToValueAtTime(3200, t + dur * 0.8);
+    f.frequency.setValueAtTime(500, t);
+    f.frequency.exponentialRampToValueAtTime(1800, t + dur * 0.7);
     const g = ctx.createGain();
     g.gain.setValueAtTime(0.0001, t);
-    g.gain.exponentialRampToValueAtTime(0.05, t + dur * 0.5);
-    g.gain.exponentialRampToValueAtTime(0.0001, t + dur + 1.6);
+    g.gain.exponentialRampToValueAtTime(0.022, t + dur * 0.45);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + dur + 1.8);
     f.connect(g).connect(this.sfx!);
-    [110, 164.8, 220, 277.2, 329.6].forEach((fr, i) => {
-      for (const det of [-6, 6]) {
-        const o = ctx.createOscillator();
-        o.type = "sawtooth";
-        o.frequency.value = fr;
-        o.detune.value = det + i;
-        o.connect(f);
-        o.start(t);
-        o.stop(t + dur + 1.7);
-      }
-    });
-    for (let i = 0; i < 26; i++) {
-      const at = t + dur * Math.pow(i / 26, 0.7) + Math.random() * 0.05;
-      const f0 = 1700 + Math.random() * 1600;
-      [1, 2.31, 4.17].forEach((k, j) => this.osc("sine", f0 * k, at, 0.12 + 0.2 / (j + 1), 0.022 / (j + 1.3), this.sfx!));
+    for (const fr of [220, 329.6, 392, 493.9]) {
+      const o = ctx.createOscillator();
+      o.type = "triangle";
+      o.frequency.value = fr;
+      o.detune.value = (Math.random() - 0.5) * 8;
+      o.connect(f);
+      o.start(t);
+      o.stop(t + dur + 1.9);
     }
+    [0.35, 0.9, 1.5, 2.2, 2.9].forEach((k, i) => {
+      const at = t + k * (dur / 3.6);
+      const f0 = [2349, 1976, 2637, 1760, 2093][i];
+      [1, 2.31].forEach((m, j) => this.osc("sine", f0 * m, at, 0.9 / (j + 1), 0.012 / (j + 1.5), this.sfx!));
+    });
   }
 
   setEnabled(on: boolean) {

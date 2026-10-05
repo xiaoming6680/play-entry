@@ -165,8 +165,11 @@ class Stage2D implements Stage {
           y += this.h * 0.12;
         }
       }
-      const e = f.reduced ? 1 : smooth((f.enter - Math.min(0.4, Math.abs(d) * 0.08)) / 0.6);
-      y += (1 - e) * this.h * 0.6;
+      // 入场：选中的那张开场时就在原位（标志推近贴合到它上面），其余的轻轻升起、淡入
+      // （入场前不透明度留 0.002 而不是 0：完全透明的元素浏览器不画，淡入第一帧才画会卡一下）
+      const e = f.reduced || (isSel && f.mode === "boot") ? 1 : smooth((f.enter - Math.min(0.4, Math.abs(d) * 0.08)) / 0.6);
+      y += (1 - e) * ch * 0.3;
+      op *= Math.max(0.002, e);
       c.el.style.transform = `translate3d(${(x - cw / 2).toFixed(1)}px,${(y - ch).toFixed(1)}px,0) scale(${sc.toFixed(3)})`;
       c.el.style.opacity = String(Math.max(0, op).toFixed(3));
       c.el.style.zIndex = String(z);
@@ -229,6 +232,17 @@ class Stage2D implements Stage {
   }
   focusRect() {
     return this.focus;
+  }
+  /** 开场「推近」用：选中卡片正面的四个角（左上、右上、右下、左下） */
+  faceQuad() {
+    const r = this.focus;
+    if (!r) return null;
+    return [
+      { x: r.x, y: r.y },
+      { x: r.x + r.w, y: r.y },
+      { x: r.x + r.w, y: r.y + r.h },
+      { x: r.x, y: r.y + r.h },
+    ];
   }
   dispose() {
     this.deck.remove();

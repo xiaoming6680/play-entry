@@ -14,9 +14,9 @@ p.on("console", (m) => m.type() === "error" && errs.push(m.text().slice(0, 200))
 await p.goto("http://127.0.0.1:5180/?boot");
 await new Promise((r) => setTimeout(r, 1500));
 await p.screenshot({ path: `${out}/op-${tag}-00-gate.png` });
-if (mobile) await p.tap("#op-power"); else await p.click("#op-power");
+if (mobile) await p.tap("#op-power", { force: true }); else await p.click("#op-power", { force: true });
 const t0 = Date.now();
-const marks = [400, 1100, 1600, 2300, 3100, 3400, 3650, 3900, 4500, 5400, 6400, 7600];
+const marks = [400, 1100, 1600, 2300, 3100, 3800, 4300, 4700, 5000, 5600, 6600, 8800];
 for (const [i, ms] of marks.entries()) {
   const wait = ms - (Date.now() - t0);
   if (wait > 0) await new Promise((r) => setTimeout(r, wait));

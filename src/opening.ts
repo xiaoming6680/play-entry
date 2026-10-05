@@ -1,76 +1,96 @@
-// 开场演出（约 7 秒，可跳过，每个会话只播一次）：
-// 先停在「开机」画面：浏览器只有在用户点击/按键之后才允许发声，所以把这一下点击做成开机键，
-// 点了就带声音开演；也可以静音进入；9 秒没人点就静音自动开演（右下角还能再开声音）。
-// 开机线 → 激光沿轮廓「刻」出标志（火花）→ 红点落下 → 扫描显出「铭刻」
-// → 「入盒」：标志变形贴合 3D 卡带的正面，红点炸成闪光，黑场褪去 → 一镜到底拉远到整片卡带海。
+// 开场演出（约 8.5 秒，可跳过，每个会话只播一次）。风格：克制、精致——细线、柔光、慢而稳，跟随明暗主题。
+// 先停在开机画面：浏览器只有在用户点击/按键之后才允许发声，所以把这一下点击做成"开始"；
+// 点了就带声音开演，也可以静音进入，9 秒没人点就静音自动开演（右下角还能再开声音）。
+// 一道发丝线展开又收拢 → 笔尖沿轮廓描出卡带（发丝线），再"上墨"到正式线宽 → 红点轻轻落下
+// → 「铭刻」从左到右缓缓显出，副标题字距从宽收拢
+// → 推近：整组标志像镜头推进一样放大（按对数缩放，看起来匀速），轮廓变细，正好落在 3D 卡带正面的边上
+// → 显形：红点化开成一圈波纹，背景从红点向外褪去，玻璃卡带从里面显出来；轮廓交给卡带自己的玻璃边，玻璃上扫过一道柔光
+// → 显形还没收尾镜头就开始拉远（动作重叠，不会"停一下再动"），卡带落回卡位，整片仓库从雾里淡出 → HUD 分批入场。
 import type { Sound } from "./audio";
 import { smooth } from "./motion";
 
 type P = { x: number; y: number };
 
-// 标志轮廓（与 index.html 的 SVG 同一图形，40×46 坐标）：竖版圆角 + 右上切角
-function outline(): P[] {
+// 标志轮廓（与 index.html 的 SVG 同一图形，40×46 坐标）：竖版圆角 + 右上切角。
+// r = 圆角半径：标志是 3，卡带实物是 1.4（DIM.R 0.14 × 10），推近时从前者过渡到后者，点数不变
+function outline(r: number): P[] {
   const pts: P[] = [];
   const seg = (a: P, b: P, n = 1) => {
     for (let i = 1; i <= n; i++) pts.push({ x: a.x + ((b.x - a.x) * i) / n, y: a.y + ((b.y - a.y) * i) / n });
   };
-  const quad = (a: P, c: P, b: P, n = 6) => {
+  const quad = (a: P, c: P, b: P, n = 8) => {
     for (let i = 1; i <= n; i++) {
       const t = i / n,
         u = 1 - t;
       pts.push({ x: u * u * a.x + 2 * u * t * c.x + t * t * b.x, y: u * u * a.y + 2 * u * t * c.y + t * t * b.y });
     }
   };
-  pts.push({ x: 7, y: 4 });
-  seg({ x: 7, y: 4 }, { x: 30, y: 4 }, 8);
-  seg({ x: 30, y: 4 }, { x: 36, y: 10 }, 3);
-  seg({ x: 36, y: 10 }, { x: 36, y: 39 }, 10);
-  quad({ x: 36, y: 39 }, { x: 36, y: 42 }, { x: 33, y: 42 });
-  seg({ x: 33, y: 42 }, { x: 7, y: 42 }, 9);
-  quad({ x: 7, y: 42 }, { x: 4, y: 42 }, { x: 4, y: 39 });
-  seg({ x: 4, y: 39 }, { x: 4, y: 7 }, 11);
-  quad({ x: 4, y: 7 }, { x: 4, y: 4 }, { x: 7, y: 4 });
+  pts.push({ x: 4 + r, y: 4 });
+  seg({ x: 4 + r, y: 4 }, { x: 30, y: 4 }, 12);
+  seg({ x: 30, y: 4 }, { x: 36, y: 10 }, 4);
+  seg({ x: 36, y: 10 }, { x: 36, y: 42 - r }, 14);
+  quad({ x: 36, y: 42 - r }, { x: 36, y: 42 }, { x: 36 - r, y: 42 });
+  seg({ x: 36 - r, y: 42 }, { x: 4 + r, y: 42 }, 13);
+  quad({ x: 4 + r, y: 42 }, { x: 4, y: 42 }, { x: 4, y: 42 - r });
+  seg({ x: 4, y: 42 - r }, { x: 4, y: 4 + r }, 16);
+  quad({ x: 4, y: 4 + r }, { x: 4, y: 4 }, { x: 4 + r, y: 4 });
   return pts;
 }
-const OUT = outline();
+const OUT = outline(3);
+const OUT_CARD = outline(1.4);
 const LEN: number[] = [0];
 for (let i = 1; i < OUT.length; i++) LEN.push(LEN[i - 1] + Math.hypot(OUT[i].x - OUT[i - 1].x, OUT[i].y - OUT[i - 1].y));
 const TOTAL = LEN[LEN.length - 1];
+// 红点圆心：标志里在 (20,19)，卡带上是核心井的中心
+const DOT = { x: 20, y: 19 };
+const WELL = { x: 20, y: 4 + 38 * 0.437 };
 
-// 时间轴（秒）
+// 时间轴（秒，从开始算）
 const T = {
-  line0: 0.15,
-  line1: 0.75,
-  eng0: 0.75,
-  eng1: 1.9,
-  lbl1: 2.05,
-  dot0: 2.02,
-  word0: 2.1,
-  hold: 2.95,
-  morph: 0.7,
-  intro: 3.1,
+  line0: 0.1,
+  line1: 0.9,
+  draw0: 0.8,
+  draw1: 2.0,
+  ink1: 2.4, // 发丝线"上墨"到正式线宽
+  lbl1: 2.35,
+  dot0: 2.3,
+  word0: 2.45,
+  hold: 3.5, // 推近开始
+  morph: 1.1, // 推近、贴合到卡带上
+  reveal: 0.85, // 红点化开、卡带显形
+  lead: 0.35, // 显形结束前多久开始拉远
+  intro: 3.4, // 3D：镜头拉远
+  intro2d: 1.6, // 2D：其余卡片淡入
 };
 
-interface Spark {
-  x: number;
-  y: number;
-  vx: number;
-  vy: number;
-  life: number;
-}
+const cubicIO = (x: number) => (x < 0.5 ? 4 * x * x * x : 1 - Math.pow(-2 * x + 2, 3) / 2);
+const quartOut = (x: number) => 1 - Math.pow(1 - Math.max(0, Math.min(1, x)), 4);
+const clamp01 = (x: number) => Math.max(0, Math.min(1, x));
+const lerpP = (a: P, b: P, k: number) => ({ x: a.x + (b.x - a.x) * k, y: a.y + (b.y - a.y) * k });
 
 export interface OpeningHooks {
   /** 3D/2D 舞台是否已经准备好（没好就停在标志上等） */
   ready: () => boolean;
   is3D: () => boolean;
-  /** 3D 选中卡带正面的四个角（屏幕坐标），用来让标志贴合上去 */
+  /** 选中卡带正面的四个角（屏幕坐标，左上、右上、右下、左下），用来让标志贴合上去 */
   quad: () => P[] | null;
+  /** 卡带显形的那一刻：玻璃上扫过一道柔光 */
+  onGlint: () => void;
   /** HUD 该进场了（切到浏览模式） */
   onBrowse: () => void;
   /** 全部结束 */
   onDone: () => void;
   onSoundOn: () => void;
   onMute: () => void;
+}
+
+/** 推近：标志坐标 → 屏幕坐标的映射，外加整组标志（文字）该怎么跟着缩放 */
+interface Zoom {
+  map: (p: P) => P;
+  /** 绕这个点缩放（屏幕坐标） */
+  at: P;
+  /** 相对推近前的缩放倍数 */
+  k: number;
 }
 
 export class Opening {
@@ -82,19 +102,22 @@ export class Opening {
   private t = 0;
   private speed = 1;
   private browsed = false;
-  private sparks: Spark[] = [];
   private g: CanvasRenderingContext2D;
+  private brand: HTMLElement;
   private W = 0;
   private H = 0;
   private dpr = 1;
   private cues = new Set<string>();
-  private morphFrom: P[] | null = null;
-  private quadAt: P[] | null = null;
+  /** 推近开始那一刻标志的位置和大小（之后整组标志会被缩放，不能再去量占位框） */
+  private from: { o: P; s: number } | null = null;
   private tcStart = performance.now();
   private soundOn = false;
   private skipped = false;
   private powered = false;
   private gateStart = performance.now();
+  private colors = { ink: "#0F1216", bg: "#E9EBEE", bg2: "#F4F5F7", accent: "#FF3B2F" };
+  private colorsAt = -1;
+  private onKey: (e: KeyboardEvent) => void;
 
   constructor(
     private root: HTMLElement,
@@ -103,10 +126,12 @@ export class Opening {
   ) {
     const c = root.querySelector<HTMLCanvasElement>(".op-c")!;
     this.g = c.getContext("2d")!;
+    this.brand = root.querySelector<HTMLElement>(".op-brand")!;
+    this.brand.style.transform = this.brand.style.transformOrigin = "";
     this.fit();
     addEventListener("resize", () => this.fit());
     root.classList.add("run");
-    // 开机：点开机键 / 画面任意处 / 回车空格 = 带声音；「静音进入」= 不出声
+    // 开始：点按钮 / 画面任意处 / 回车空格 = 带声音；「静音进入」= 不出声
     root.querySelector("#op-mute")!.addEventListener("click", (e) => {
       e.stopPropagation();
       this.power(false);
@@ -126,10 +151,18 @@ export class Opening {
     };
     addEventListener("keydown", this.onKey);
   }
-  private onKey: (e: KeyboardEvent) => void;
 
-  /** 在用户手势里调用：带声音时同步解锁 AudioContext */
-  /** withSound：true 带声音；false 用户选了静音；null 没人点、自动静音开演（不改声音设置） */
+  /** 开场时间（秒，调试和截图用） */
+  get time() {
+    return this.t;
+  }
+
+  /** 卡带已经完全显形、开场画布不再铺底（之后背后的东西才看得见） */
+  get revealed() {
+    return this.t >= T.hold + T.morph + T.reveal;
+  }
+
+  /** withSound：true 带声音；false 用户选了静音；null 没人点、自动静音开演（不改声音设置）。要在用户手势里调用 */
   power(withSound: boolean | null) {
     if (this.powered) return;
     this.powered = true;
@@ -158,7 +191,7 @@ export class Opening {
     if (this.skipped || this.done) return;
     if (!this.powered) this.power(null);
     this.skipped = true;
-    this.speed = 4;
+    this.speed = 3.5;
     this.root.classList.add("skip");
   }
 
@@ -168,31 +201,90 @@ export class Opening {
     fn();
   }
 
+  private get introDur() {
+    return this.hooks.is3D() ? T.intro : T.intro2d;
+  }
+
+  /** 明暗主题的颜色（开场跟随主题：浅色是白底黑细线，深色是黑底白细线） */
+  private themeColors() {
+    const now = performance.now();
+    if (now - this.colorsAt > 500) {
+      const cs = getComputedStyle(document.documentElement);
+      const v = (k: string, d: string) => cs.getPropertyValue(k).trim() || d;
+      this.colors = { ink: v("--ink", "#0F1216"), bg: v("--bg", "#E9EBEE"), bg2: v("--bg2", "#F4F5F7"), accent: v("--accent", "#FF3B2F") };
+      this.colorsAt = now;
+    }
+    return this.colors;
+  }
+
   /** 标志在屏幕上的位置（由 .op-mark 占位框决定，桌面在文字左边，手机在上面） */
   private markRect() {
     const r = this.root.querySelector(".op-mark")!.getBoundingClientRect();
-    return { x: r.left, y: r.top, s: r.width / 32 };
-  }
-  private toScreen(p: P) {
-    const m = this.markRect();
-    return { x: m.x + (p.x - 4) * m.s, y: m.y + (p.y - 4) * m.s };
+    return { o: { x: r.left, y: r.top }, s: r.width / 32 };
   }
   /** 标志坐标 → 3D 卡带正面（双线性） */
   private toQuad(p: P, q: P[]) {
     const a = (p.x - 4) / 32,
       b = (p.y - 4) / 38;
-    const top = { x: q[0].x + (q[1].x - q[0].x) * a, y: q[0].y + (q[1].y - q[0].y) * a };
-    const bot = { x: q[3].x + (q[2].x - q[3].x) * a, y: q[3].y + (q[2].y - q[3].y) * a };
-    return { x: top.x + (bot.x - top.x) * b, y: top.y + (bot.y - top.y) * b };
+    return lerpP(lerpP(q[0], q[1], a), lerpP(q[3], q[2], a), b);
   }
 
+  /**
+   * 推近到第 e（0..1，已缓动）步时的映射。两个相似矩形之间"缩放 + 平移"有一个不动点，
+   * 绕它按对数插值缩放倍数，就是镜头匀速推进的感觉；终点再把透视的那点偏差补上，正好贴住卡带正面。
+   */
+  private zoom(e: number, q: P[] | null): Zoom {
+    const m = this.from ?? this.markRect();
+    const { o, s } = m;
+    const logo = (p: P) => ({ x: o.x + (p.x - 4) * s, y: o.y + (p.y - 4) * s });
+    if (!this.from || e <= 0) return { map: logo, at: o, k: 1 };
+    if (!q) {
+      // 拿不到卡带（舞台还没画出来）：原地轻轻放大
+      const at = { x: this.W / 2, y: this.H / 2 },
+        k = 1 + e * 0.35;
+      return { map: (p) => lerpP(at, logo(p), k), at, k };
+    }
+    const o1 = q[0];
+    const s1 = Math.hypot(q[1].x - q[0].x, q[1].y - q[0].y) / 32;
+    const end = (p: P) => ({ x: o1.x + (p.x - 4) * s1, y: o1.y + (p.y - 4) * s1 });
+    const fix = (p: P) => {
+      const a = end(p),
+        b = this.toQuad(p, q);
+      return { x: (b.x - a.x) * e, y: (b.y - a.y) * e };
+    };
+    if (Math.abs(s1 - s) < s * 0.05) {
+      // 大小几乎一样：直接平移过去
+      return {
+        map: (p) => {
+          const a = lerpP(logo(p), end(p), e),
+            d = fix(p);
+          return { x: a.x + d.x, y: a.y + d.y };
+        },
+        at: o,
+        k: 1,
+      };
+    }
+    const ux = (o1.x - o.x) / (s - s1),
+      uy = (o1.y - o.y) / (s - s1);
+    const at = { x: o.x + s * ux, y: o.y + s * uy };
+    const S = s * Math.pow(s1 / s, e);
+    return {
+      map: (p) => {
+        const d = fix(p);
+        return { x: at.x + S * (p.x - 4 - ux) + d.x, y: at.y + S * (p.y - 4 - uy) + d.y };
+      },
+      at,
+      k: S / s,
+    };
+  }
+
+  /** 推进时间轴、触发各个节点（不画东西；画在 paint 里，等舞台这一帧画完、卡带位置是最新的再画） */
   tick(dt: number) {
     if (this.done) return;
     if (!this.powered) {
       this.timecode();
       this.root.classList.toggle("ready", this.hooks.ready());
       if (performance.now() - this.gateStart > 9000) this.power(null);
-      this.drawGate();
       return;
     }
     // 停在标志上等舞台准备好
@@ -203,26 +295,26 @@ export class Opening {
     const t = this.t;
     this.timecode();
 
-    const morphT = (t - T.hold) / T.morph;
-    // 只在「入盒」开始的那一帧初始化（2D 版没有可贴合的卡带，quadAt 一直是 null，不能拿它当标记）
-    if (morphT >= 0 && !this.morphFrom) {
-      this.quadAt = this.hooks.is3D() ? this.hooks.quad() : null;
-      this.morphFrom = OUT.map((p) => this.toScreen(p));
+    if (t >= T.hold && !this.from) {
+      this.from = this.markRect();
       this.root.classList.add("morph");
-      if (this.soundOn) this.sound.opWhoosh();
+      if (this.soundOn && !this.skipped) this.sound.opWhoosh();
     }
-    const introT = (t - T.hold - T.morph) / T.intro;
+    const revealT = (t - T.hold - T.morph) / T.reveal;
+    if (revealT >= 0)
+      this.once("bloom", () => {
+        if (this.soundOn && !this.skipped) {
+          this.sound.opBoom();
+          this.sound.opSwell(T.reveal - T.lead + this.introDur);
+        }
+      });
+    if (revealT >= 0.55) this.once("glint", () => this.hooks.onGlint());
+    if (revealT >= 1) this.root.classList.add("out");
+    const introT = (t - T.hold - T.morph - T.reveal + T.lead) / this.introDur;
     if (introT >= 0) {
       this.intro = Math.min(1, introT);
       if (this.ignite < 0) this.ignite = 0;
       else this.ignite += dt * this.speed;
-      this.once("boom", () => {
-        if (this.soundOn) {
-          this.sound.opBoom();
-          this.sound.opSwell(T.intro / this.speed);
-        }
-      });
-      if (introT > 0.05) this.root.classList.add("out");
       if (introT >= 0.72 && !this.browsed) {
         this.browsed = true;
         this.hooks.onBrowse();
@@ -233,10 +325,8 @@ export class Opening {
         this.ignite = Infinity;
         removeEventListener("keydown", this.onKey);
         this.hooks.onDone();
-        return;
       }
     }
-    this.draw(t, morphT, dt * this.speed);
   }
 
   private timecode() {
@@ -249,211 +339,187 @@ export class Opening {
     el.textContent = `00:${p(Math.floor(s / 60))}:${p(s % 60)}:${p(f)}`;
   }
 
-  private draw(t: number, morphT: number, dt: number) {
+  /** 画这一帧（main 在舞台画完之后调用） */
+  paint() {
+    if (this.done) return;
+    const g = this.g;
+    g.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
+    g.clearRect(0, 0, this.W, this.H);
+    if (this.powered) this.draw(this.t);
+    else this.warm();
+  }
+
+  /**
+   * 预热：画布第一次用某种画法（不透明三段渐变铺满、径向渐变镂空）时浏览器要现编着色器，
+   * 正好卡在推近、显形开始的那一帧（实测 70–100ms）。只有原样画（全屏、不透明）才算数，
+   * 所以趁停在开机画面等点击时照正式的画法画一帧——和开机画面的 CSS 背景同一道渐变，看不出来。
+   */
+  private warmed = false;
+  private warm() {
+    if (this.warmed) return;
+    this.warmed = true;
+    this.backdrop(this.themeColors(), 0.5, { x: this.W / 2, y: this.H / 2 }, Math.min(this.W, this.H) / 3);
+  }
+
+  /** 背景铺底；k > 0 时以 c 为圆心镂空（显形），far = 圆心到卡带最远角的距离 */
+  private backdrop(col: { bg: string; bg2: string }, k: number, c: P, far: number) {
+    const g = this.g;
+    const bg = g.createLinearGradient(0, 0, 0, this.H);
+    bg.addColorStop(0, col.bg2);
+    bg.addColorStop(0.6, col.bg);
+    bg.addColorStop(1, col.bg);
+    g.fillStyle = bg;
+    g.fillRect(0, 0, this.W, this.H);
+    if (k <= 0) return 0;
+    const R = Math.max(1, (far / 0.62) * (1 - Math.pow(1 - k, 2.2)));
+    const hole = g.createRadialGradient(c.x, c.y, 0, c.x, c.y, R);
+    hole.addColorStop(0, "rgba(0,0,0,1)");
+    hole.addColorStop(0.62, "rgba(0,0,0,1)");
+    hole.addColorStop(1, "rgba(0,0,0,0)");
+    g.globalCompositeOperation = "destination-out";
+    g.fillStyle = hole;
+    g.fillRect(0, 0, this.W, this.H);
+    g.globalCompositeOperation = "source-over";
+    return R;
+  }
+
+  private draw(t: number) {
     const g = this.g,
       W = this.W,
       H = this.H;
-    g.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
-    g.clearRect(0, 0, W, H);
-    const m = Math.max(0, Math.min(1, morphT));
-    const em = m < 0.5 ? 4 * m * m * m : 1 - Math.pow(-2 * m + 2, 3) / 2;
-    // 黑场：「入盒」后半段褪去，露出背后的 3D 特写
-    const bgA = morphT < 0 ? 1 : 1 - smooth((m - 0.42) / 0.58);
-    if (bgA > 0) {
-      g.fillStyle = `rgba(6,7,8,${bgA})`;
-      g.fillRect(0, 0, W, H);
+    const col = this.themeColors();
+    const morphT = (t - T.hold) / T.morph;
+    const m = clamp01(morphT);
+    const em = cubicIO(m);
+    const revealT = (t - T.hold - T.morph) / T.reveal;
+    const k = clamp01(revealT);
+    const q = this.from ? this.hooks.quad() : null;
+    const z = this.zoom(em, q);
+    // 整组标志（文字）跟着一起推近，同一个不动点、同一个倍数
+    if (this.from) {
+      this.brand.style.transformOrigin = `${z.at.x.toFixed(1)}px ${z.at.y.toFixed(1)}px`;
+      this.brand.style.transform = `scale(${z.k.toFixed(4)})`;
     }
-    const start = this.toScreen(OUT[0]);
-    const s = this.markRect().s;
+    const s = (this.from ?? this.markRect()).s;
+    const well = z.map(lerpP(DOT, WELL, em));
 
-    // 1) 开机线：一道横线从中间展开，再收成一个点（激光头）
+    // 0) 背景：推近时一直不透明（盖住背后的 3D），显形时从红点向外镂空，露出背后同色调的页面和卡带
+    //   （镂空到 k = 1 时内圈已经盖过卡带四角，外面的铺底和页面背景是同一道渐变，直接撤掉看不出来）
+    if (this.from && k < 1) {
+      const far = q ? Math.max(...q.map((c) => Math.hypot(c.x - well.x, c.y - well.y))) : Math.hypot(W, H) / 2;
+      const R = this.backdrop(col, revealT > 0 ? k : 0, well, far);
+      if (revealT > 0) {
+        // 波纹：一圈很淡的细线跟着显形的前沿往外走
+        const ra = 0.32 * (1 - k) * smooth(k / 0.12);
+        if (ra > 0.004) {
+          g.globalAlpha = ra;
+          g.strokeStyle = col.ink;
+          g.lineWidth = 1;
+          g.beginPath();
+          g.arc(well.x, well.y, R * 0.66, 0, Math.PI * 2);
+          g.stroke();
+          g.globalAlpha = 1;
+        }
+      }
+    }
+    const start = z.map(OUT[0]);
+
+    // 1) 一道发丝线从中间展开，再收拢到起笔点
     if (t >= T.line0 && t < T.line1) {
-      const k = (t - T.line0) / (T.line1 - T.line0);
+      const lk = (t - T.line0) / (T.line1 - T.line0);
       this.once("power", () => this.soundOn && this.sound.opPowerOn());
-      const open = smooth(k / 0.45),
-        close = smooth((k - 0.55) / 0.45);
+      const open = cubicIO(Math.min(1, lk / 0.5)),
+        close = cubicIO(Math.max(0, (lk - 0.5) / 0.5));
       const cx = W / 2 + (start.x - W / 2) * close,
         cy = H / 2 + (start.y - H / 2) * close;
-      const half = W * 0.36 * open * (1 - close) + 2;
-      const grad = g.createLinearGradient(cx - half, 0, cx + half, 0);
-      grad.addColorStop(0, "rgba(255,59,47,0)");
-      grad.addColorStop(0.5, "rgba(255,240,235,1)");
-      grad.addColorStop(1, "rgba(255,59,47,0)");
-      g.fillStyle = grad;
-      g.fillRect(cx - half, cy - 1, half * 2, 2);
-      this.glow(cx, cy, 10 + 26 * (1 - Math.abs(k - 0.5) * 2), 0.9);
+      const half = W * 0.22 * open * (1 - close);
+      g.globalAlpha = 0.85 * (1 - close * 0.3);
+      g.fillStyle = col.ink;
+      g.fillRect(cx - half, cy - 0.5, half * 2, 1);
+      g.globalAlpha = 1;
     }
 
-    // 2) 激光刻轮廓
-    const ek = (t - T.eng0) / (T.eng1 - T.eng0);
-    const drawn = ek <= 0 ? 0 : ek >= 1 ? TOTAL : TOTAL * (ek < 0.5 ? 2 * ek * ek : 1 - Math.pow(-2 * ek + 2, 2) / 2);
-    let pts: P[] = [];
-    if (this.morphFrom && this.quadAt) {
-      pts = OUT.map((p, i) => {
-        const a = this.morphFrom![i],
-          b = this.toQuad(p, this.quadAt!);
-        return { x: a.x + (b.x - a.x) * em, y: a.y + (b.y - a.y) * em };
-      });
-    } else if (this.morphFrom) {
-      // 2D：标志原地放大淡出
-      const c = { x: W / 2, y: H / 2 };
-      pts = this.morphFrom.map((a) => ({ x: a.x + (a.x - c.x) * em * 2.4, y: a.y + (a.y - c.y) * em * 2.4 }));
-    } else pts = OUT.map((p) => this.toScreen(p));
-
-    const lineA = morphT < 0 ? 1 : 1 - smooth((m - 0.55) / 0.45);
+    // 2) 笔尖描轮廓：发丝线 → 上墨；推近时线变细，圆角收成卡带实物的圆角
+    const dk = (t - T.draw0) / (T.draw1 - T.draw0);
+    const drawn = dk <= 0 ? 0 : dk >= 1 ? TOTAL : TOTAL * cubicIO(dk);
+    const pts = OUT.map((p, i) => z.map(em > 0 ? lerpP(p, OUT_CARD[i], em) : p));
+    const lineA = 1 - smooth((k - 0.4) / 0.55);
+    const inkK = smooth((t - T.draw1) / (T.ink1 - T.draw1));
+    const lw0 = 1 + (Math.max(1.6, 2.4 * s) - 1) * inkK;
+    const lw = lw0 + (1.25 - lw0) * smooth(m);
     if (drawn > 0 && lineA > 0) {
       g.lineJoin = "round";
       g.lineCap = "round";
-      const path = () => {
-        g.beginPath();
-        g.moveTo(pts[0].x, pts[0].y);
-        for (let i = 1; i < pts.length; i++) {
-          if (LEN[i] <= drawn) g.lineTo(pts[i].x, pts[i].y);
-          else {
-            const k = (drawn - LEN[i - 1]) / (LEN[i] - LEN[i - 1]);
-            g.lineTo(pts[i - 1].x + (pts[i].x - pts[i - 1].x) * k, pts[i - 1].y + (pts[i].y - pts[i - 1].y) * k);
-            break;
-          }
+      g.beginPath();
+      g.moveTo(pts[0].x, pts[0].y);
+      let tip = pts[0];
+      for (let i = 1; i < pts.length; i++) {
+        if (LEN[i] <= drawn) {
+          g.lineTo(pts[i].x, pts[i].y);
+          tip = pts[i];
+        } else {
+          const f = (drawn - LEN[i - 1]) / (LEN[i] - LEN[i - 1]);
+          tip = lerpP(pts[i - 1], pts[i], f);
+          g.lineTo(tip.x, tip.y);
+          break;
         }
-      };
-      const lw = Math.max(2, 2.4 * s) * (1 - em * 0.4);
-      path();
-      g.strokeStyle = `rgba(255,59,47,${0.35 * lineA})`;
-      g.lineWidth = lw * 3.2;
-      g.stroke();
-      path();
-      g.strokeStyle = `rgba(236,239,242,${lineA})`;
+      }
+      g.globalAlpha = lineA;
+      g.strokeStyle = col.ink;
       g.lineWidth = lw;
       g.stroke();
-      // 激光头 + 火花
-      if (ek > 0 && ek < 1) {
-        let i = 1;
-        while (i < LEN.length - 1 && LEN[i] < drawn) i++;
-        const k = (drawn - LEN[i - 1]) / (LEN[i] - LEN[i - 1] || 1);
-        const tip = { x: pts[i - 1].x + (pts[i].x - pts[i - 1].x) * k, y: pts[i - 1].y + (pts[i].y - pts[i - 1].y) * k };
-        this.glow(tip.x, tip.y, 16, 1);
-        for (let n = 0; n < 4; n++) {
-          const a = Math.random() * Math.PI * 2,
-            v = 60 + Math.random() * 220;
-          this.sparks.push({ x: tip.x, y: tip.y, vx: Math.cos(a) * v, vy: Math.sin(a) * v - 60, life: 0.25 + Math.random() * 0.35 });
-        }
-        this.once("laser", () => this.soundOn && this.sound.opLaser(T.eng1 - T.eng0));
-      }
-    }
-    // 标签横线
-    const lk = Math.max(0, Math.min(1, (t - T.eng1) / (T.lbl1 - T.eng1)));
-    if (lk > 0 && lineA > 0) {
-      const a = this.morphPoint({ x: 10, y: 35.5 }, em),
-        b = this.morphPoint({ x: 10 + 9 * lk, y: 35.5 }, em);
-      g.strokeStyle = `rgba(236,239,242,${lineA})`;
-      g.lineWidth = Math.max(2, 2.4 * s) * (1 - em * 0.4);
-      g.beginPath();
-      g.moveTo(a.x, a.y);
-      g.lineTo(b.x, b.y);
-      g.stroke();
-    }
-    // 3) 红点落下（带一圈冲击环），「入盒」时变成核心井，最后炸成闪光
-    const dk = (t - T.dot0) / 0.32;
-    if (dk > 0) {
-      this.once("ding", () => this.soundOn && this.sound.opDing());
-      const pop = dk >= 1 ? 1 : 1 + Math.sin(dk * Math.PI) * 0.35 * (1 - dk) + (dk - 1) * (1 - dk) * 0;
-      const scale = Math.min(1, dk * 1.4) * pop;
-      const from = this.toScreen({ x: 20, y: 19 });
-      let c = from,
-        r = 4.6 * s * scale;
-      if (this.morphFrom) {
-        if (this.quadAt) {
-          const to = this.toQuad({ x: 20, y: 4 + 38 * 0.437 }, this.quadAt);
-          const qw = Math.hypot(this.quadAt[1].x - this.quadAt[0].x, this.quadAt[1].y - this.quadAt[0].y);
-          c = { x: from.x + (to.x - from.x) * em, y: from.y + (to.y - from.y) * em };
-          r = r + (qw * 0.394 - r) * em;
-        } else r = r * (1 + em * 6);
-      }
-      const dotA = morphT < 0 ? 1 : 1 - smooth((m - 0.3) / 0.5);
-      if (dotA > 0) {
-        g.fillStyle = `rgba(255,59,47,${dotA * (morphT < 0 ? 1 : 0.42)})`;
+      // 笔尖：一个很小的实心点，描完就收起
+      if (dk > 0 && dk < 1) {
+        g.fillStyle = col.ink;
         g.beginPath();
-        g.arc(c.x, c.y, r, 0, Math.PI * 2);
+        g.arc(tip.x, tip.y, 2.2, 0, Math.PI * 2);
         g.fill();
+        this.once("pen", () => this.soundOn && this.sound.opLaser(T.draw1 - T.draw0));
       }
-      const ring = (t - T.dot0) / 0.6;
-      if (ring > 0 && ring < 1) {
-        g.strokeStyle = `rgba(255,59,47,${(1 - ring) * 0.8})`;
-        g.lineWidth = 2;
+      // 贴签横线：推近的前半段淡掉
+      const lk = clamp01((t - (T.draw1 - 0.05)) / (T.lbl1 - T.draw1 + 0.05));
+      const la = 1 - smooth(m / 0.5);
+      if (lk > 0 && la > 0) {
+        const a = z.map({ x: 10, y: 35.5 }),
+          b = z.map({ x: 10 + 9 * quartOut(lk), y: 35.5 });
+        g.globalAlpha = lineA * la;
         g.beginPath();
-        g.arc(from.x, from.y, 4.6 * s + ring * 60 * Math.max(1, s / 2.6), 0, Math.PI * 2);
+        g.moveTo(a.x, a.y);
+        g.lineTo(b.x, b.y);
         g.stroke();
       }
-      // 闪光
-      if (morphT > 0.78) {
-        const fk = (morphT - 0.78) / 0.8;
-        if (fk < 1) {
-          const R = Math.max(W, H) * (0.2 + fk * 1.1);
-          const grad = g.createRadialGradient(c.x, c.y, 0, c.x, c.y, R);
-          const a = (1 - fk) ** 1.6;
-          grad.addColorStop(0, `rgba(255,255,255,${0.95 * a})`);
-          grad.addColorStop(0.25, `rgba(255,120,100,${0.55 * a})`);
-          grad.addColorStop(1, "rgba(255,59,47,0)");
-          g.fillStyle = grad;
-          g.fillRect(0, 0, W, H);
-        }
+      g.globalAlpha = 1;
+    }
+
+    // 3) 红点轻轻落下（一圈很淡的环）；推近时跟着放大一点、移到核心井中心，显形时化开
+    const pk = (t - T.dot0) / 0.6;
+    if (pk > 0) {
+      this.once("bell", () => this.soundOn && this.sound.opDing());
+      const r = 4.6 * s * quartOut(pk) * Math.pow(z.k, 0.35) * (1 + 0.5 * k);
+      const dotA = 1 - smooth(k / 0.45);
+      if (dotA > 0) {
+        g.globalAlpha = dotA;
+        g.fillStyle = col.accent;
+        g.beginPath();
+        g.arc(well.x, well.y, r, 0, Math.PI * 2);
+        g.fill();
+        g.globalAlpha = 1;
+      }
+      const ring = (t - T.dot0) / 1.4;
+      if (ring > 0 && ring < 1 && morphT < 0) {
+        g.globalAlpha = 0.28 * (1 - ring);
+        g.strokeStyle = col.ink;
+        g.lineWidth = 1;
+        g.beginPath();
+        g.arc(well.x, well.y, 4.6 * s + quartOut(ring) * 34 * Math.max(1, s / 2.4), 0, Math.PI * 2);
+        g.stroke();
+        g.globalAlpha = 1;
       }
     }
-    // 火花
-    g.globalCompositeOperation = "lighter";
-    for (const p of this.sparks) {
-      p.life -= dt;
-      p.vy += 520 * dt;
-      p.x += p.vx * dt;
-      p.y += p.vy * dt;
-      if (p.life <= 0) continue;
-      g.strokeStyle = `rgba(255,${150 + Math.random() * 100},${90 + Math.random() * 60},${Math.min(1, p.life * 2.5)})`;
-      g.lineWidth = 1.4;
-      g.beginPath();
-      g.moveTo(p.x, p.y);
-      g.lineTo(p.x - p.vx * 0.025, p.y - p.vy * 0.025);
-      g.stroke();
-    }
-    g.globalCompositeOperation = "source-over";
-    this.sparks = this.sparks.filter((p) => p.life > 0);
-    // 文字：扫描显出品牌字（CSS 变量驱动遮罩）
-    const wk = (t - T.word0) / 0.55;
-    this.root.style.setProperty("--scan", String(Math.max(0, Math.min(1, wk))));
+
+    // 文字：从左到右缓缓显出（CSS 变量驱动遮罩和下面那条细线）
+    const wk = (t - T.word0) / 0.9;
+    this.root.style.setProperty("--scan", String(cubicIO(clamp01(wk))));
     if (wk > 0) this.root.classList.add("word");
-  }
-
-  /** 开机画面：黑场 + 极淡的扫描纹，开机键是 DOM */
-  private drawGate() {
-    const g = this.g;
-    g.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
-    g.fillStyle = "rgb(6,7,8)";
-    g.fillRect(0, 0, this.W, this.H);
-    const y = ((performance.now() / 2400) % 1) * this.H;
-    const grad = g.createLinearGradient(0, y - 60, 0, y + 2);
-    grad.addColorStop(0, "rgba(255,255,255,0)");
-    grad.addColorStop(1, "rgba(255,255,255,0.035)");
-    g.fillStyle = grad;
-    g.fillRect(0, y - 60, this.W, 62);
-  }
-
-  private morphPoint(p: P, em: number) {
-    const a = this.toScreen(p);
-    if (!this.morphFrom) return a;
-    if (!this.quadAt) {
-      const c = { x: this.W / 2, y: this.H / 2 };
-      return { x: a.x + (a.x - c.x) * em * 2.4, y: a.y + (a.y - c.y) * em * 2.4 };
-    }
-    const b = this.toQuad(p, this.quadAt);
-    return { x: a.x + (b.x - a.x) * em, y: a.y + (b.y - a.y) * em };
-  }
-
-  private glow(x: number, y: number, r: number, a: number) {
-    const g = this.g;
-    const grad = g.createRadialGradient(x, y, 0, x, y, r);
-    grad.addColorStop(0, `rgba(255,255,255,${a})`);
-    grad.addColorStop(0.3, `rgba(255,120,90,${a * 0.7})`);
-    grad.addColorStop(1, "rgba(255,59,47,0)");
-    g.fillStyle = grad;
-    g.fillRect(x - r, y - r, r * 2, r * 2);
   }
 }

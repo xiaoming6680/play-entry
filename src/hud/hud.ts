@@ -135,25 +135,6 @@ export class Hud {
     this.setMainLabel("读取卡带");
   }
 
-  /** 开场后标题"解码"出来：随机字符从左到右定格成真正的标题 */
-  scrambleTitle() {
-    const el = document.getElementById("p-title")?.lastElementChild as HTMLElement | null;
-    const final = this.item?.title ?? "";
-    if (!el || !final || this.reduced()) return;
-    const pool = "卡带刻录读取铭节拍点关我从开始零壹#/*01";
-    const t0 = performance.now();
-    const step = () => {
-      const p = Math.min(1, (performance.now() - t0) / 700);
-      const n = Math.floor(final.length * p);
-      el.textContent =
-        final.slice(0, n) +
-        [...final.slice(n)].map(() => pool[Math.floor(Math.random() * pool.length)]).join("");
-      if (p < 1) requestAnimationFrame(step);
-      else el.textContent = final;
-    };
-    setTimeout(() => requestAnimationFrame(step), 250);
-  }
-
   setMainLabel(text: string) {
     this.mainLbl.textContent = text;
   }

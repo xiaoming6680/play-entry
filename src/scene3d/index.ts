@@ -55,6 +55,9 @@ const LED: Record<string, [string, number]> = {
   blank: ["#8B939D", 0],
 };
 
+/** 开场时选中那盒悬浮在架子上方的额外高度（拉远进度 p 的函数）：镜头抬高到能越过前排时再落回卡位 */
+const introLift = (p: number) => (READ_LIFT - PREVIEW_LIFT) * (1 - smooth((p - 0.08) / 0.62));
+
 /** 点亮波：半径（卡位）= 2.5 + 30·t^1.7，越往外越快，配合镜头拉远。这里反过来求某个距离被点亮的时刻 */
 const igniteTime = (d: number) => (d <= 2.5 ? 0 : Math.pow((d - 2.5) / 30, 1 / 1.7));
 
@@ -380,8 +383,8 @@ class Scene3D implements Stage {
     const P = this.portrait;
     const aspect = this.w / this.h;
     const tan = Math.tan((FOV / 2) * DEG);
-    // 开场特写：卡带占画面 80%（竖屏按宽度算）
-    const closeDist = Math.max(DIM.H / 0.8 / (2 * tan), DIM.W / 0.8 / (2 * tan * aspect));
+    // 开场特写：卡带占画面高度一半（竖屏按宽度 62% 算）——标志推近到这里贴合，放大倍数不至于太猛
+    const closeDist = Math.max(DIM.H / (P ? 0.42 : 0.5) / (2 * tan), DIM.W / (P ? 0.62 : 0.5) / (2 * tan * aspect));
     const browse: Pose = P
       ? { az: 30, el: 29, dist: 62, ty: 2.4, fx: 0.5, fy: 0.33 }
       : { az: 38, el: 27, dist: 50, ty: 2.2, fx: 0.4, fy: 0.5 };
@@ -401,13 +404,15 @@ class Scene3D implements Stage {
     if (f.intro !== null || (f.mode === "boot" && f.intro === null)) {
       // 开场：从一盒卡带的特写一镜拉远到整片仓库（不用弹簧，按进度精确摆位）
       const p = f.intro ?? 0;
+      // 转角稍微领先于拉远：先抬高、转开，卡带落回卡位时已经是俯视，不会像"沉进"前排里；
+      // 镜头目标点先跟着卡带一起往下走，卡带一直留在画面中间
       const ed = smooth(p);
-      const ea = smooth((p - 0.12) / 0.88);
+      const ea = smooth(p / 0.85);
       const set = (s: Spring, v: number) => ((s.value = v), (s.velocity = 0));
       set(c.az, lerp(close.az, browse.az, ea) * DEG);
       set(c.el, lerp(close.el, browse.el, ea) * DEG);
       set(c.dist, Math.exp(lerp(Math.log(close.dist), Math.log(browse.dist), ed)));
-      set(c.ty, lerp(close.ty, browse.ty, ed));
+      set(c.ty, lerp(PREVIEW_LIFT + introLift(p) + DIM.H / 2, browse.ty, ed));
       set(c.fx, lerp(close.fx, browse.fx, ed));
       set(c.fy, lerp(close.fy, browse.fy, ed));
       set(c.tx, 0);
@@ -524,14 +529,15 @@ class Scene3D implements Stage {
     const upright = Math.abs(rd.yaw.value - yawTarget) < 0.05 || reading;
     if (f.intro !== null || (booting && f.intro === null)) {
       // 开场：这盒卡带先悬浮在架子上方（不被前排挡住），镜头拉远时落回卡位
-      rd.extra.value = (READ_LIFT - PREVIEW_LIFT) * (1 - smooth((f.intro ?? 0) / 0.6));
+      rd.extra.value = introLift(f.intro ?? 0);
       rd.extra.velocity = 0;
     } else damp(rd.extra, reading ? READ_LIFT - PREVIEW_LIFT : upright ? 0 : rd.extra.value, f.reduced ? 60 : 4.2, dt);
     damp(rd.frost, reading ? 1 : 0.7, 6, dt);
     // 选中卡带的颜色光：跟着它走，换卡带时颜色渐变
     const u = this.capMat.uniforms;
     const it = this.items[wrap(sel, n)];
-    const glowTarget = it.kind === "blank" ? 0 : f.ignite === Infinity ? 1 : f.ignite < 0 ? 0.5 : Math.min(1, 0.5 + f.ignite);
+    // 开场特写时不打颜色光（素净的白玻璃，和黑白细线的标志衔接），点亮波开始后才慢慢亮起来
+    const glowTarget = it.kind === "blank" ? 0 : f.ignite === Infinity ? 1 : f.ignite < 0 ? 0 : Math.min(1, f.ignite / 1.4);
     // 主色太浅（比如 stay 的纸白）就用第二色当光色
     this.tmpColor.set(it.color);
     if (this.tmpColor.r * 0.299 + this.tmpColor.g * 0.587 + this.tmpColor.b * 0.114 > 0.8) this.tmpColor.set(it.color2);
@@ -564,9 +570,10 @@ class Scene3D implements Stage {
         if (f.ignite < 0) vis = isSel ? 1 : 0;
         else if (!isSel) {
           const local = f.ignite - igniteTime(dist);
-          vis = local <= 0 ? 0 : smooth(local / 0.4);
-          rise = -1.8 * (1 - smooth(local / 0.55));
-          flash = local > 0 ? Math.exp(-local * 3.2) * (main ? 1.6 : 0.7) : 0;
+          // 从雾里淡出、轻轻升起；只给主架一点点颜色，不闪
+          vis = local <= 0 ? 0 : smooth(local / 0.8);
+          rise = -0.9 * (1 - smooth(local / 0.9));
+          flash = local > 0 && main ? Math.exp(-local * 2.5) * 0.25 : 0;
         }
       }
       // —— 高度 ——

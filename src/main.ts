@@ -89,6 +89,7 @@ let stayLeftAt = -99;
 let awake = false;
 let tempo: { bpm: number; start: number; until: number } | null = null;
 let glintStart = -1;
+let glintDur = 0.8;
 let mouse: { x: number; y: number } | null = null;
 let confirmMobile = false;
 
@@ -106,6 +107,8 @@ function applyTheme(next: Theme) {
 }
 
 // 游戏光晕：两层交替淡入淡出
+const appEl = document.getElementById("app")!;
+let auraLit = false;
 const auraEls = [...document.querySelectorAll<HTMLElement>("#aura i")];
 let auraIdx = 0;
 function setAura(item: Item, sameLayer = false) {
@@ -221,6 +224,7 @@ async function openRead() {
   if (!ok) return;
   reveal = 1;
   glintStart = t;
+  glintDur = 0.8;
   sound.shimmer();
   hud.clearRedact();
   if (item.core === "beat") sound.startBeat(Number(item.coreOptions.bpm) || 128);
@@ -383,7 +387,6 @@ function enterBrowse() {
   const app = document.getElementById("app")!;
   app.classList.add("hud-enter");
   hud.setMode("browse");
-  hud.scrambleTitle();
   setTimeout(() => app.classList.remove("hud-enter"), 1800);
   lastInput = performance.now();
 }
@@ -393,6 +396,10 @@ function startOpening() {
     ready: () => stageReady,
     is3D: () => stage.kind === "3d",
     quad: () => (stage as Stage & { faceQuad?: () => { x: number; y: number }[] | null }).faceQuad?.() ?? null,
+    onGlint: () => {
+      glintStart = t;
+      glintDur = 1.3;
+    },
     onBrowse: enterBrowse,
     onDone: () => {
       opening = null;
@@ -523,6 +530,13 @@ function loop(now: number) {
   const red = reduced();
   opening?.tick(dt);
   if (opening?.intro != null && enterStart < 0) enterStart = t;
+  // 游戏光晕等卡带显形完、点亮波已经开始才淡入（开场特写时卡带保持素净的白玻璃；
+  // 早了会被开场画布的铺底盖住，铺底一撤就突然冒出来）
+  const lit = enterStart >= 0 && (!opening || opening.revealed);
+  if (lit !== auraLit) {
+    auraLit = lit;
+    appEl.classList.toggle("lit", lit);
+  }
   rail.step(dt, red);
   // 插入下沉 / 弹出过冲
   if (insertBouncy) bouncy(insert, insertTarget, 170, 15, dt);
@@ -567,7 +581,7 @@ function loop(now: number) {
         : bootDone
           ? Infinity
           : -1,
-    glint: glintStart >= 0 && t - glintStart < 0.8 ? (t - glintStart) / 0.8 : -1,
+    glint: glintStart >= 0 && t - glintStart < glintDur ? (t - glintStart) / glintDur : -1,
     parallax: mouse,
     waves,
     hoverSlot: hover.slot,
@@ -615,6 +629,7 @@ function loop(now: number) {
     }));
   }
   stage.draw(frame);
+  opening?.paint();
   hud.setFocus(stage.focusRect(), bootDone && !opening && mode === "browse" && (stage.kind === "3d" || enter > 0.8), dt);
   clockClock += dt;
   if (clockClock > 0.25) {
@@ -1044,6 +1059,9 @@ if (qs.has("shot")) {
 (window as unknown as { __mk: unknown }).__mk = {
   get mode() {
     return mode;
+  },
+  get opening() {
+    return opening;
   },
   get stage() {
     return stage.kind;
