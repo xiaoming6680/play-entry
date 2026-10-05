@@ -72,8 +72,8 @@ const uniforms = /* glsl */ `
     // 选中的卡带用自己的颜色照亮周围：浅色主题像有色光打在白玻璃上（相乘），深色主题像发光（相加）
     vec3 gd = vWorld - uGlowPos;
     float gk = uGlowStr * exp(-dot(gd, gd) / 120.0) * (0.55 + 0.45 * max(dot(N, normalize(-gd + vec3(0.0, 1.0, 0.0))), 0.0));
-    col = mix(col, col * mix(vec3(1.0), uGlowCol * 1.15 + 0.08, 0.45), gk * (1.0 - uDark));
-    col += uGlowCol * gk * 0.32 * uDark;
+    col = mix(col, col * mix(vec3(1.0), uGlowCol * 1.15 + 0.08, 0.3), gk * (1.0 - uDark));
+    col += uGlowCol * gk * 0.22 * uDark;
     // 点亮瞬间的闪光：主架用游戏色，库存用一点冷白
     col += vE.y * mix(vec3(0.55, 0.62, 0.7), vTint, step(0.01, vB.w)) * mix(0.35, 0.6, uDark);
     float fa = clamp(max(f, low * 0.92), 0.0, 1.0);
