@@ -1326,7 +1326,8 @@ kbd {
 [data-mode="boot"] .counter,
 [data-mode="boot"] .hint,
 [data-mode="boot"] .hud-foot {
-  opacity: 0;
+  /* 不用 0：完全透明的元素浏览器不画，入场那一刻才第一次排版、栅格化中文大字，会卡一下 */
+  opacity: 0.001;
   translate: 0 14px;
 }
 .hud-enter .hud-top > *,
