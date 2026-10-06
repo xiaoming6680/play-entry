@@ -12,7 +12,23 @@ export function stayCore(): Core {
   let lastLook: { x: number; y: number } | null = null;
   let leaveT = -1,
     leaveDir = 0;
+  // 彩蛋：读取时戳它的眼睛
+  let pokes = 0,
+    pokedAt = -99,
+    madUntil = -1,
+    sulkUntil = -1;
   return {
+    poke(_u, _v, t) {
+      if (t - pokedAt > 4) pokes = 0;
+      pokes++;
+      pokedAt = t;
+      if (pokes >= 3) madUntil = t + 3;
+      if (pokes >= 5) {
+        sulkUntil = t + 4.5;
+        madUntil = t + 4.5;
+      }
+      return pokes;
+    },
     draw(g, S, s, item) {
       const dark = s.theme === "dark";
       const paper = dark ? "#16181B" : "#F4F1EA";
@@ -54,6 +70,14 @@ export function stayCore(): Core {
         ty = leaveDir > 0 ? 0.9 : -0.9;
         wantOpen = 1.12;
       }
+      const sulk = t < sulkUntil;
+      const mad = t < madUntil;
+      if (sulk) {
+        // 生气了：闭眼、扭头
+        tx = -0.9;
+        ty = 0.2;
+        wantOpen = 0.03;
+      } else if (mad) wantOpen = Math.min(wantOpen, 0.62);
       if (s.reduced) {
         tx = 0;
         ty = 0;
@@ -75,6 +99,9 @@ export function stayCore(): Core {
           } else lid = Math.abs(1 - 2 * b);
         }
       }
+      // 被戳：猛地眨一下
+      const fl = (t - pokedAt) / 0.32;
+      if (fl >= 0 && fl < 1) lid = Math.min(lid, Math.abs(1 - 2 * fl) * 0.9);
       const h = open * lid;
 
       inWell(
@@ -118,8 +145,33 @@ export function stayCore(): Core {
           g.lineWidth = S * 0.02;
           g.strokeStyle = ink;
           g.stroke();
-          // 害羞 / 挽留时的一点情绪粉
-          const blush = t < shyUntil ? 1 : leaving ? 0.6 : 0;
+          // 生气：一道压下来的眉毛；闹别扭时再加三道"哼"
+          if (mad) {
+            const by = c - R * 0.36 - (sulk ? 0 : R * 0.04);
+            g.beginPath();
+            g.moveTo(c - w * 0.72, by - R * 0.12);
+            g.lineTo(c + w * 0.1, by + R * 0.02);
+            g.moveTo(c + w * 0.72, by - R * 0.12);
+            g.lineTo(c - w * 0.1 + w * 0.2, by + R * 0.02);
+            g.lineWidth = S * 0.02;
+            g.strokeStyle = ink;
+            g.stroke();
+          }
+          if (sulk) {
+            g.lineWidth = S * 0.012;
+            g.strokeStyle = rgba(item.color2, 0.9);
+            for (let i = 0; i < 3; i++) {
+              const a = -0.5 + i * 0.5;
+              const x0 = c + w * 1.02 + Math.cos(a) * R * 0.06,
+                y0 = c - R * 0.5 + Math.sin(a) * R * 0.06;
+              g.beginPath();
+              g.moveTo(x0, y0);
+              g.lineTo(x0 + Math.cos(a) * R * 0.12, y0 + Math.sin(a) * R * 0.12);
+              g.stroke();
+            }
+          }
+          // 害羞 / 挽留 / 被戳时的一点情绪粉
+          const blush = t < shyUntil || mad ? 1 : leaving ? 0.6 : 0;
           if (blush > 0) {
             for (const sx of [-1, 1]) {
               const gx = c + sx * w * 0.78,

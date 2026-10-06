@@ -325,6 +325,108 @@ export class Sound {
     }
   }
 
+  // ———————— 彩蛋 ————————
+  /** 发现彩蛋：一串上行的玻璃音（五声音阶）+ 一声单音铃 */
+  egg() {
+    if (!this.ready) return;
+    const t = this.ctx!.currentTime;
+    [1318.5, 1568, 1760, 2093, 2637].forEach((f, i) =>
+      [1, 2.31, 4.17].forEach((k, j) => this.osc("sine", f * k, t + i * 0.07, 0.5 / (j + 1), 0.05 / (j + 1.3), this.sfx!)),
+    );
+    this.osc("sine", 1046.5, t + 0.38, 2.2, 0.05, this.sfx!, undefined, 0.01);
+    this.osc("sine", 1568, t + 0.38, 1.6, 0.02, this.sfx!, undefined, 0.01);
+  }
+  /** 甩阵列：一大串玻璃互相轻碰，越来越稀 */
+  cascade() {
+    if (!this.ready) return;
+    const t = this.ctx!.currentTime;
+    const scale = [2093, 2349, 2637, 3136, 3520, 4186];
+    let at = 0;
+    for (let i = 0; i < 22; i++) {
+      const f0 = scale[(i * 7 + (i >> 1)) % scale.length] * (i % 3 === 0 ? 0.5 : 1);
+      const s = 0.9 - i * 0.032;
+      [1, 2.31, 4.17].forEach((k, j) => this.osc("sine", f0 * k, t + at, 0.12 + 0.3 / (j + 1), (0.04 * s) / (j + 1.4), this.sfx!));
+      at += 0.025 + i * 0.006;
+    }
+  }
+  /** 红点弹跳 / 屏保撞墙：短促的软木声 */
+  bounce(strength = 1) {
+    if (!this.ready) return;
+    const t = this.ctx!.currentTime;
+    this.osc("sine", 520 + strength * 220, t, 0.12, 0.06 * strength, this.sfx!, 180, 0.002);
+    this.noise(t, 0.03, 0.02 * strength, "bandpass", 1800, this.sfx!);
+  }
+  /** 屏保正中角落：大三和弦 + 高处的铃 */
+  corner() {
+    if (!this.ready) return;
+    const t = this.ctx!.currentTime;
+    [523.25, 659.25, 783.99, 1046.5, 1318.5].forEach((f, i) => this.osc("triangle", f, t + i * 0.05, 1.6, 0.045, this.sfx!));
+    [2637, 3136, 3951].forEach((f, i) => this.osc("sine", f, t + 0.3 + i * 0.09, 1.2, 0.02, this.sfx!));
+  }
+  /** stay 被戳：一声软软的"啵"，越戳越高越急 */
+  poke(n: number) {
+    if (!this.ready) return;
+    const t = this.ctx!.currentTime;
+    const f = 300 + Math.min(n, 6) * 70;
+    this.osc("sine", f * 1.6, t, 0.14, 0.06, this.sfx!, f, 0.003);
+  }
+  /** dot 被点：一个 8-bit 小音，音高随次数爬升 */
+  blip(n: number) {
+    if (!this.ready) return;
+    const t = this.ctx!.currentTime;
+    const steps = [0, 2, 4, 7, 9];
+    const f = 440 * Math.pow(2, (steps[n % 5] + 12 * (Math.floor(n / 5) % 3)) / 12);
+    this.osc("square", f, t, 0.06, 0.025, this.sfx!);
+  }
+  /** 熄灯 / 开灯：日光灯管的嗡声和咔哒 */
+  lamp(on: boolean) {
+    if (!this.ready) return;
+    const t = this.ctx!.currentTime;
+    this.noise(t, 0.04, 0.08, "bandpass", 2400, this.sfx!, undefined, 3);
+    if (!on) {
+      this.osc("sine", 110, t, 0.5, 0.03, this.sfx!, 50, 0.005);
+      return;
+    }
+    [0.08, 0.22, 0.31, 0.5].forEach((d) => this.noise(t + d, 0.05, 0.05, "bandpass", 2400, this.sfx!, undefined, 3));
+    const ctx = this.ctx!;
+    const o = ctx.createOscillator(),
+      g = ctx.createGain();
+    o.type = "sawtooth";
+    o.frequency.value = 100;
+    g.gain.setValueAtTime(0.0001, t + 0.5);
+    g.gain.exponentialRampToValueAtTime(0.006, t + 0.6);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + 2.4);
+    const f = ctx.createBiquadFilter();
+    f.type = "lowpass";
+    f.frequency.value = 600;
+    o.connect(f).connect(g).connect(this.sfx!);
+    o.start(t + 0.5);
+    o.stop(t + 2.5);
+  }
+  /** 隐藏卡带登场：一段 8-bit 小号角（方波琶音 + 收尾和弦） */
+  fanfare() {
+    if (!this.ready) return;
+    const t = this.ctx!.currentTime;
+    const notes = [392, 523.25, 659.25, 783.99, 659.25, 783.99, 1046.5];
+    const at = [0, 0.09, 0.18, 0.27, 0.42, 0.51, 0.66];
+    notes.forEach((f, i) => this.osc("square", f, t + at[i], i === notes.length - 1 ? 0.9 : 0.1, 0.03, this.sfx!));
+    [523.25, 659.25, 783.99].forEach((f) => this.osc("triangle", f, t + 0.66, 1.2, 0.03, this.sfx!));
+    this.noise(t + 0.66, 0.6, 0.02, "highpass", 5000, this.sfx!);
+  }
+  /** 命令行敲键 */
+  key() {
+    if (!this.ready) return;
+    const t = this.ctx!.currentTime;
+    this.noise(t, 0.018, 0.025, "highpass", 3500, this.sfx!);
+  }
+  /** 刻录：一道上扫的气声 + 定音 */
+  burn() {
+    if (!this.ready) return;
+    const t = this.ctx!.currentTime;
+    this.noise(t, 0.7, 0.03, "bandpass", 600, this.sfx!, 4000, 2);
+    this.osc("sine", 1568, t + 0.6, 1.4, 0.04, this.sfx!, undefined, 0.01);
+  }
+
   // ———————— beat：读取 beat 卡带时的小节拍 ————————
   startBeat(bpm: number) {
     if (!this.ctx || this.beatTimer) return;

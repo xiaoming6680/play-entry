@@ -2,6 +2,10 @@
 import { Sound } from "./audio";
 import { CoreBank } from "./cores";
 import { rgba } from "./cores/common";
+import { doodle } from "./cores/doodle";
+import { DIVE_MAX } from "./cores/misc";
+import { banner, EGGS, Eggs, LooseDot, Night, Saver, shake } from "./eggs";
+import { Terminal } from "./terminal";
 import { buildItems, STATUS_LABEL, wrap } from "./data";
 import { Hud, wait } from "./hud/hud";
 import { Opening } from "./opening";
@@ -157,6 +161,7 @@ function onSelect(slot: number, dir: number) {
   const prev = itemAt(lastSlot);
   const item = itemAt(slot);
   hud.setItem(item, wrap(slot, items.length), dir);
+  syncBlankUi();
   if (dir) {
     waves.push({ slot, t0: t, dir });
     if (waves.length > 4) waves.shift();
@@ -209,7 +214,9 @@ async function openRead() {
   // 正文一展开就先盖住，等读卡头扫过再揭开（不能先露出来再盖）
   hud.redact();
   hud.setMainLabel(item.kind === "game" ? "插入卡带" : "插进去试试");
-  hud.setNote("");
+  hud.setNote(item.kind === "blank" && doodle.enabled && !doodle.has ? "在核心里画点什么，画完按「刻录」。" : "");
+  syncBlankUi();
+  if (night.dark) night.on();
   sound.lift();
   if (!(await animate(0.62, () => {}, token))) return;
   sound.scan(1.05);
@@ -244,6 +251,8 @@ function closeRead() {
   hud.setMode("browse");
   hud.setMainLabel("读取卡带");
   hud.setNote("");
+  drawing = false;
+  syncBlankUi();
   const from = reveal;
   animate(0.35, (p) => (reveal = from * (1 - p)), token).then(() => token === seq && (reveal = 0));
 }
@@ -251,6 +260,7 @@ function closeRead() {
 async function doInsert() {
   if (mode !== "read") return;
   const item = current();
+  if (item.kind === "blank" && doodle.enabled && doodle.dirty) return burnDoodle();
   if (reveal < 1) {
     // 还在解密就按了插入：先直接读完
     seq++;
@@ -301,7 +311,9 @@ async function doInsert() {
         ]
       : item.kind === "secret"
         ? [{ text: `> 读取 ${code} …` }, { text: "> 这盒卡带，就是你现在看到的一切。", cls: "dim" }]
-        : [{ text: `> 读取 ${code} …` }, { text: "> 里面什么都没有。", cls: "dim" }];
+        : doodle.has
+          ? [{ text: `> 读取 ${code} …` }, { text: "> 里面有一幅画。是你刻的。", cls: "dim" }]
+          : [{ text: `> 读取 ${code} …` }, { text: "> 里面什么都没有。", cls: "dim" }];
   const typed = await hud.typeLines(lines);
   if (!typed || token !== seq) return;
   hud.slot(item.kind === "game" ? "err" : "on");
@@ -324,10 +336,13 @@ async function doInsert() {
         ? "这个游戏暂时停下来了。"
         : "还在做。做好了，它会在这里亮起来。可以先复制链接，发到电脑上以后看。"
       : item.kind === "blank"
-        ? "空白卡带。下一个游戏做好了，会刻进这里。"
+        ? doodle.has
+          ? "这盒现在刻着你的画。仓库里每一盒空白卡带都会显示它。"
+          : "空白卡带。下一个游戏做好了，会刻进这里。"
         : "谢谢你翻到这里。",
   );
   if (item.core === "beat" && sound.enabled) sound.startBeat(Number(item.coreOptions.bpm) || 128);
+  syncBlankUi();
   setTimeout(() => token === seq && hud.clearTerm(), 1600);
 }
 
@@ -365,6 +380,7 @@ let bootDone = false;
 let opening: Opening | null = null;
 let browseSince = 0;
 let igniteStart = -1; // 没有开场时（同一会话再次打开）的点亮波起点
+let replaying = false;
 
 function setBootProgress(p: number) {
   bootBar.style.setProperty("--p", String(clamp(p, 0.06, 1)));
@@ -389,6 +405,7 @@ function enterBrowse() {
   hud.setMode("browse");
   setTimeout(() => app.classList.remove("hud-enter"), 1800);
   lastInput = performance.now();
+  setTimeout(checkNight, 2400);
 }
 
 function startOpening() {
@@ -404,6 +421,10 @@ function startOpening() {
     onDone: () => {
       opening = null;
       markBooted();
+      if (replaying) {
+        replaying = false;
+        eggs.find("replay");
+      }
     },
     onSoundOn: () => setSound(true),
     onMute: () => setSound(false),
@@ -414,6 +435,7 @@ function startOpening() {
 function replayBoot() {
   if (mode === "insert" || opening) return;
   closeRead();
+  replaying = true;
   bootDone = false;
   mode = "boot";
   enter = 0;
@@ -545,7 +567,11 @@ function loop(now: number) {
     insert.value += (insertTarget - insert.value) * k;
   }
   const sel = rail.selected;
-  if (sel !== lastSlot) onSelect(sel, Math.sign(sel - lastSlot));
+  if (sel !== lastSlot) {
+    travelled += Math.abs(sel - lastSlot);
+    onSelect(sel, Math.sign(sel - lastSlot));
+    if (travelled >= 100 && !loopShown) loopEgg();
+  }
   if (enterStart >= 0) enter = clamp((t - enterStart) / 1.5);
   if (stayLeaving && t - stayLeftAt > 1.6) stayLeaving = 0;
   const idleFor = (now - lastInput) / 1000;
@@ -556,7 +582,10 @@ function loop(now: number) {
   if (awake && idleFor > 60 && !awakeWhispered) {
     awakeWhispered = true;
     hud.whisper("……你还在吗", 4000);
+    sound.hmm();
   }
+  if (idleFor > 120 && bootDone && !opening && !saver.active && (mode === "browse" || mode === "read") && !about.open && !cli.open && !document.hidden)
+    saver.start();
   const beat = beatNow();
   const frame: Frame = {
     t,
@@ -650,7 +679,10 @@ function poke() {
   lastInput = performance.now();
   if (awake) {
     awake = false;
-    if (awakeWhispered) hud.whisper("啊，你在。");
+    if (awakeWhispered) {
+      hud.whisper("啊，你在。");
+      eggs.find("idle");
+    }
     awakeWhispered = false;
   }
 }
@@ -668,6 +700,15 @@ host.addEventListener("pointerdown", (e) => {
   if (e.button > 0) return;
   host.setPointerCapture(e.pointerId);
   drag = { id: e.pointerId, x: e.clientX, y: e.clientY, spin0: spin, moved: false };
+  if (mode === "read" && reveal >= 1 && current().kind === "blank" && doodle.enabled) {
+    // 彩蛋「刻点什么」：在空白卡带的核心里画画
+    const cp = stage.corePoint?.(e.clientX, e.clientY, rail.selected);
+    if (cp && doodle.inWell(cp.u, cp.v)) {
+      drawing = true;
+      doodle.start(cp.u, cp.v);
+      syncBlankUi();
+    }
+  }
   if (mode === "browse") {
     rail.catch();
     rail.dragStart(e.clientX, e.clientY, minLen(stage.slotAxis(), touch ? 100 : 46), minLen(stage.laneAxis(), 120), performance.now());
@@ -686,7 +727,10 @@ host.addEventListener("pointermove", (e) => {
     dy = e.clientY - drag.y;
   if (Math.hypot(dx, dy) > 8) drag.moved = true;
   if (mode === "browse") rail.dragMove(e.clientX, e.clientY, performance.now());
-  else if (mode === "read") spin = clamp(drag.spin0 + dx * 0.006, -0.62, 0.62);
+  else if (mode === "read" && drawing) {
+    const cp = stage.corePoint?.(e.clientX, e.clientY, rail.selected);
+    if (cp && doodle.inWell(cp.u, cp.v)) doodle.move(cp.u, cp.v);
+  } else if (mode === "read") spin = clamp(drag.spin0 + dx * 0.006, -0.62, 0.62);
 });
 const endDrag = (e: PointerEvent, cancel = false) => {
   if (!drag || drag.id !== e.pointerId) return;
@@ -697,6 +741,11 @@ const endDrag = (e: PointerEvent, cancel = false) => {
     if (cancel) return rail.cancelDrag();
     const tap = rail.dragEnd(performance.now(), reduced(), e.pointerType === "touch");
     if (tap) onTap(e.clientX, e.clientY);
+    else if (Math.abs(rail.throwV) >= 20) flingEgg();
+  } else if (mode === "read" && drawing) {
+    drawing = false;
+    doodle.end();
+    syncBlankUi();
   } else if (mode === "read") {
     spin = 0;
     if (!moved && !cancel) onTapRead(e.clientX, e.clientY);
@@ -745,6 +794,8 @@ function onTapRead(x: number, y: number) {
   const p = stage.pick(x, y);
   const onCard = p && p.lane === 0 && p.slot === rail.selected;
   if (!onCard) return;
+  const cp = stage.corePoint?.(x, y, rail.selected);
+  if (cp && current().core !== "beat" && reveal >= 1) corePoke(current(), cp);
   // 彩蛋：在 beat 卡带上跟着拍子点 4 下
   if (current().core === "beat") {
     const n = performance.now();
@@ -757,9 +808,15 @@ function onTapRead(x: number, y: number) {
       const steady = recent.every((v) => Math.abs(v - avg) < avg * 0.22);
       if (steady && avg > 250 && avg < 1500) {
         const bpm = 60000 / avg;
-        tempo = { bpm, start: t, until: t + (60 / bpm) * 16 };
+        tempo = { bpm, start: t, until: t + (60 / bpm) * 32 };
         hud.tempo(bpm);
-        hud.whisper(`整座仓库跟着你的 ${Math.round(bpm)} BPM 动起来了`);
+        // 鼓点也换成你的速度
+        if (sound.enabled) {
+          sound.stopBeat();
+          sound.startBeat(bpm);
+        }
+        banner("TAP TEMPO · 跟拍", `♩ = ${Math.round(bpm)}`, "整座仓库跟着你的速度起伏", current().color, 2400);
+        eggs.find("tempo");
         tapTimes.length = 0;
       }
     }
@@ -804,8 +861,13 @@ const about = document.getElementById("about") as HTMLDialogElement;
 
 addEventListener("keydown", (e) => {
   poke();
-  if (about.open) return;
+  if (about.open || cli.open) return;
   if (e.metaKey || e.ctrlKey || e.altKey) return;
+  if (e.key === "/" && mode !== "boot" && mode !== "insert") {
+    e.preventDefault();
+    openCli();
+    return;
+  }
   // 彩蛋：Konami、键入游戏 id
   keyLog.push(e.key.length === 1 ? e.key.toLowerCase() : e.key);
   if (keyLog.length > KONAMI.length) keyLog.shift();
@@ -813,10 +875,13 @@ addEventListener("keydown", (e) => {
   if (/^[a-z]$/.test(e.key.toLowerCase()) && e.key.length === 1) {
     typed = (typed + e.key.toLowerCase()).slice(-12);
     const hit = items.find((i) => i.kind === "game" && typed.endsWith(i.id));
+    showTyped(hit);
     if (hit && mode !== "insert") {
       typed = "";
       if (mode === "read") closeRead();
       gotoItem(items.indexOf(hit));
+      sound.opWhoosh();
+      eggs.find("typeid");
     }
   }
   if (mode === "boot") return;
@@ -882,22 +947,275 @@ function unlockSecret() {
   rail.target = fixed;
   lastSlot = fixed;
   hud.setItem(current(), wrap(fixed, n), 0);
-  sound.launch();
-  hud.whisper("翻出了一盒不在架子上的卡带", 3200);
-  setTimeout(() => gotoItem(items.findIndex((i) => i.kind === "secret")), 500);
+  sound.fanfare();
+  shake(host);
+  appEl.classList.add("konami");
+  setTimeout(() => appEl.classList.remove("konami"), 1600);
+  banner("HIDDEN CARTRIDGE · 隐藏卡带", "MK-00", "入口本身：一盒不在架子上的卡带", "var(--accent)", 2800);
+  eggs.find("konami");
+  setTimeout(() => gotoItem(items.findIndex((i) => i.kind === "secret")), 900);
+  setTimeout(() => hud.whisper("读取它，然后点一下核心", 3400), 3200);
 }
 
+
+// ———————————————————— 彩蛋 ————————————————————
+const eggs = new Eggs(sound, reduced);
+eggs.onOpenList = () => {
+  syncSegs();
+  about.showModal();
+  setTimeout(() => document.getElementById("ab-eggs")?.scrollIntoView({ block: "start", behavior: "smooth" }), 60);
+};
+const gameColors = () => ["#FF3B2F", ...items.filter((i) => i.kind === "game").flatMap((i) => [i.color, i.color2])];
+const saver = new Saver(sound, gameColors);
+saver.onCorner = () => eggs.find("corner");
+saver.onExit = () => {
+  lastInput = performance.now();
+  awake = false;
+  awakeWhispered = false;
+  eggs.find("saver");
+};
+const night = new Night(sound);
+night.onOn = () => hud.whisper("灯亮了。", 2200);
+const brand = document.getElementById("brand")!;
+const looseDot = new LooseDot(
+  sound,
+  () => {
+    const c = brand.querySelector(".brand-mark .c")?.getBoundingClientRect();
+    return c && c.width ? { x: c.left + c.width / 2, y: c.top + c.height / 2, r: c.width / 2 } : null;
+  },
+  () => brand.classList.remove("dotless"),
+);
+let drawing = false;
+let travelled = 0;
+let loopShown = false;
+let lastFling = -99;
+
+function syncBlankUi() {
+  const it = current();
+  const btn = hud.btnCopy;
+  if (it.kind === "blank" && doodle.enabled && mode === "read") {
+    hud.setMainLabel(doodle.dirty ? "刻录" : "插进去试试");
+    btn.textContent = "擦掉";
+    btn.hidden = !doodle.has;
+  } else {
+    btn.textContent = "复制链接";
+    btn.hidden = !it.url;
+  }
+}
+
+function burnDoodle() {
+  doodle.burn();
+  sound.burn();
+  glintStart = t;
+  glintDur = 0.9;
+  hud.setNote("这盒现在刻着你的画。仓库里每一盒空白卡带都会显示它。");
+  hud.toast("已刻录。");
+  syncBlankUi();
+}
+
+/** 读取时点了核心：每种卡带一种反应 */
+function corePoke(it: Item, cp: { u: number; v: number }) {
+  if (it.kind === "blank" && doodle.enabled) return;
+  const n = bank.poke(it, cp.u, cp.v, t);
+  if (!n) return;
+  switch (it.core) {
+    case "stay":
+      sound.poke(n);
+      if (n === 3) hud.whisper("stay：……干嘛。");
+      if (n === 4) hud.whisper("stay：别戳了。");
+      if (n === 5) {
+        hud.whisper("stay：哼。不理你了。", 3200);
+        shake(host);
+        eggs.find("poke");
+      }
+      break;
+    case "dot":
+      sound.blip(n);
+      if (n === 10) hud.whisper("……还在点？");
+      if (n === 30) {
+        hud.whisper("30 个点。你已经在玩放置游戏了。", 3200);
+        sound.era(5);
+        eggs.find("clicker");
+      }
+      if (n === 100) hud.whisper("一百个点了。去玩真正的那个吧。", 3200);
+      break;
+    case "blank":
+      sound.tick(0.4 + n * 0.08);
+      if (n === 3) hud.whisper("……真的是空的。");
+      if (n === 5) hud.whisper("别点了，真的什么都没有。");
+      if (n === 7) {
+        doodle.enable();
+        sound.shimmer();
+        hud.whisper("……好吧。那你来刻点什么。", 3200);
+        hud.setNote("在核心里画点什么，画完按「刻录」。");
+        eggs.find("doodle");
+        syncBlankUi();
+      }
+      break;
+    case "secret":
+      if (n === DIVE_MAX) {
+        sound.opDing();
+        hud.whisper("最里面是一个红点。就是开场落下的那一个。", 3600);
+        eggs.find("dive");
+      } else {
+        sound.opWhoosh();
+        if (n === 1) hud.whisper("再往里……");
+      }
+      break;
+  }
+}
+
+function flingEgg() {
+  if (t - lastFling < 1.5) return;
+  lastFling = t;
+  sound.cascade();
+  shake(host);
+  hud.whisper("轻拿轻放……都是玻璃做的。", 2400);
+  eggs.find("fling");
+}
+
+function loopEgg() {
+  loopShown = true;
+  sound.shimmer();
+  banner("SLOT 100", "你翻了 100 盒", `其实仓库里只有 ${items.length} 盒卡带，一直在转圈。`, "var(--ink)", 3600);
+  eggs.find("loop");
+}
+
+function checkNight() {
+  if (new Date().getHours() >= 5) return;
+  try {
+    if (sessionStorage.getItem("mk-night")) return;
+    sessionStorage.setItem("mk-night", "1");
+  } catch {
+    /* ignore */
+  }
+  lightsOff(true);
+}
+function lightsOff(late: boolean) {
+  if (night.dark) return;
+  night.off();
+  eggs.find("night");
+  const d = new Date();
+  if (late) banner(`${d.getHours()}:${String(d.getMinutes()).padStart(2, "0")} · 夜班`, "这么晚还在玩？", "仓库熄灯了。拿着手电筒找吧", "#FFD23B", 3200);
+  else hud.whisper("熄灯了。读取一盒卡带，灯就会亮。", 3200);
+}
+
+/** 明暗切换：从选中的卡带开始一圈圈扩散（View Transitions；不支持就直接切） */
+function switchTheme(next: Theme) {
+  const doc = document as Document & { startViewTransition?: (cb: () => void) => { finished: Promise<void> } };
+  if (!doc.startViewTransition || reduced() || next === theme) return applyTheme(next);
+  const r = stage.focusRect();
+  const x = r ? r.x + r.w / 2 : innerWidth / 2,
+    y = r ? r.y + r.h / 2 : innerHeight / 2;
+  const root = document.documentElement;
+  root.style.setProperty("--vt-x", `${x}px`);
+  root.style.setProperty("--vt-y", `${y}px`);
+  root.style.setProperty("--vt-r", `${Math.hypot(Math.max(x, innerWidth - x), Math.max(y, innerHeight - y))}px`);
+  root.classList.add("vt");
+  const vt = doc.startViewTransition(() => applyTheme(next));
+  vt.finished.finally(() => root.classList.remove("vt"));
+}
+
+// 键入卡带名字时，底部显示你打的字
+const typedEl = document.createElement("div");
+typedEl.className = "typed";
+typedEl.setAttribute("aria-hidden", "true");
+document.querySelector(".hud")!.append(typedEl);
+let typedTimer = 0;
+function showTyped(hit: Item | undefined) {
+  const ids = items.filter((i) => i.kind === "game").map((i) => i.id);
+  let shown = "";
+  // 只在像是在打某个名字时显示（是某个名字的开头）；单个 s / w 是翻页键，不算
+  for (let k = Math.min(typed.length, 6); k >= 2; k--) {
+    const part = typed.slice(-k);
+    if (ids.some((id) => id.startsWith(part))) {
+      shown = part;
+      break;
+    }
+  }
+  if (!shown && !hit) return typedEl.classList.remove("on");
+  typedEl.textContent = hit ? hit.id : shown;
+  typedEl.classList.toggle("hit", !!hit);
+  typedEl.classList.add("on");
+  clearTimeout(typedTimer);
+  typedTimer = window.setTimeout(() => typedEl.classList.remove("on"), hit ? 900 : 1400);
+}
+
+// 命令行
+const cli = new Terminal({
+  items: () => items,
+  current,
+  goto: (it) => {
+    if (mode === "read") closeRead();
+    gotoItem(items.indexOf(it));
+  },
+  read: () => void openRead(),
+  play: async (it) => {
+    if (mode === "read") closeRead();
+    gotoItem(items.indexOf(it));
+    await wait(700);
+    await openRead();
+    if (mode === "read") doInsert();
+  },
+  theme: (v) => {
+    if (v) {
+      store.set("mk-theme", v);
+      switchTheme(v);
+    }
+    return theme;
+  },
+  sound: (on) => {
+    if (on != null) setSound(on);
+    return sound.enabled;
+  },
+  lights: (on) => (on ? night.on() : lightsOff(false)),
+  saver: () => saver.start(),
+  replay: () => replayBoot(),
+  about: () => {
+    syncSegs();
+    about.showModal();
+  },
+  eggs: () => ({ found: EGGS.filter((e) => eggs.has(e.id)), total: EGGS.length }),
+  visits: () => visits,
+  key: () => sound.key(),
+  found: (id) => void eggs.find(id),
+});
+function openCli() {
+  if (mode === "boot") return;
+  cli.show();
+  eggs.find("terminal");
+}
+// 也可以连点三下 REC（手机上 REC 藏起来了，就连点三下卡位数字）
+const recTaps: number[] = [];
+const tripleTap = () => {
+  const n = performance.now();
+  recTaps.push(n);
+  while (recTaps.length && n - recTaps[0] > 1200) recTaps.shift();
+  if (recTaps.length >= 3) {
+    recTaps.length = 0;
+    openCli();
+  }
+};
+document.querySelector(".rec")?.addEventListener("click", tripleTap);
+document.querySelector(".c-num")?.addEventListener("click", tripleTap);
 
 // ———————————————————— 按钮 ————————————————————
 const on = (id: string, fn: () => void) => document.getElementById(id)!.addEventListener("click", fn);
 on("btn-main", () => (mode === "browse" ? openRead() : mode === "read" ? doInsert() : undefined));
 on("btn-back", closeRead);
-on("btn-copy", copyLink);
+on("btn-copy", () => {
+  if (mode === "read" && current().kind === "blank" && doodle.enabled) {
+    doodle.erase();
+    sound.empty();
+    hud.toast("擦掉了。");
+    syncBlankUi();
+  } else copyLink();
+});
 on("btn-sound", () => setSound(!sound.enabled));
 on("btn-theme", () => {
   const next: Theme = theme === "dark" ? "light" : "dark";
   store.set("mk-theme", next);
-  applyTheme(next);
+  switchTheme(next);
   sound.tick(0.5);
 });
 on("btn-about", () => {
@@ -917,7 +1235,7 @@ document.querySelectorAll<HTMLButtonElement>("#seg-theme button").forEach((b) =>
   b.addEventListener("click", () => {
     const v = b.dataset.v!;
     store.set("mk-theme", v === "auto" ? null : v);
-    applyTheme(v === "auto" ? (mqDark.matches ? "dark" : "light") : (v as Theme));
+    switchTheme(v === "auto" ? (mqDark.matches ? "dark" : "light") : (v as Theme));
   }),
 );
 document.querySelectorAll<HTMLButtonElement>("#seg-sound button").forEach((b) =>
@@ -929,8 +1247,7 @@ hud.onTick = (i) => {
   if (mode === "browse") gotoItem(i);
 };
 
-// 标志：短按回到第一盒，长按重播开场
-const brand = document.getElementById("brand")!;
+// 标志：短按回到第一盒，连点掉红点，长按重播开场
 let pressTimer = 0;
 let longPressed = false;
 brand.addEventListener("pointerdown", () => {
@@ -949,9 +1266,26 @@ const cancelPress = () => {
 brand.addEventListener("pointerup", cancelPress);
 brand.addEventListener("pointerleave", cancelPress);
 brand.addEventListener("contextmenu", (e) => e.preventDefault());
+const brandClicks: number[] = [];
 brand.addEventListener("click", (e) => {
   e.preventDefault();
   if (longPressed) return;
+  // 彩蛋：连点 5 下，红点掉下来
+  const n = performance.now();
+  brandClicks.push(n);
+  while (brandClicks.length && n - brandClicks[0] > 1600) brandClicks.shift();
+  if (brandClicks.length >= 3 && !looseDot.loose) {
+    brand.classList.remove("wobble");
+    void brand.offsetWidth;
+    brand.classList.add("wobble");
+  }
+  if (brandClicks.length >= 5 && !looseDot.loose) {
+    brandClicks.length = 0;
+    brand.classList.add("dotless");
+    looseDot.drop();
+    eggs.find("drop");
+    return;
+  }
   if (mode === "read") closeRead();
   if (mode === "browse") gotoItem(0);
 });
@@ -969,17 +1303,44 @@ visualViewport?.addEventListener("resize", resize);
 
 let hiddenTitle = "";
 let askedWhere = false;
+// 切走标签页：标签上的字一句句变，图标闭上眼睛
+const AWAY = ["别关我……", "……你去哪了", "我还在这里", "（盯——）", "回来吧", "……我数到十", "一、二、三……", "……十。", "好吧。我等你。"];
+let awayTimer = 0;
+let hiddenAt = 0;
+const iconEl = document.querySelector<HTMLLinkElement>('link[rel="icon"]');
+const iconHref = iconEl?.href ?? "";
+const SLEEPY =
+  "data:image/svg+xml," +
+  encodeURIComponent(
+    '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 40 46"><path d="M7 4H30L36 10V39Q36 42 33 42H7Q4 42 4 39V7Q4 4 7 4Z" fill="#F4F1EA" stroke="#111" stroke-width="3"/><path d="M11 19Q20 26 29 19" fill="none" stroke="#111" stroke-width="3" stroke-linecap="round"/><path d="M14 22.5l-2 3M20 24.5v3.4M26 22.5l2 3" stroke="#111" stroke-width="2.4" stroke-linecap="round"/></svg>',
+  );
 document.addEventListener("visibilitychange", () => {
   if (document.hidden) {
     hiddenTitle = document.title;
-    document.title = "别关我……";
+    hiddenAt = performance.now();
+    let i = 0;
+    document.title = AWAY[0];
+    clearInterval(awayTimer);
+    awayTimer = window.setInterval(() => {
+      i = Math.min(AWAY.length - 1, i + 1);
+      document.title = AWAY[i];
+    }, 2600);
+    if (iconEl) iconEl.href = SLEEPY;
     sound.stopBeat();
   } else {
+    clearInterval(awayTimer);
     if (hiddenTitle) document.title = hiddenTitle;
+    if (iconEl) iconEl.href = iconHref;
     last = performance.now();
-    if (!askedWhere && bootDone) {
+    const away = (performance.now() - hiddenAt) / 1000;
+    if (bootDone && away > 1.5) {
+      const msg = !askedWhere ? "stay：你刚才去哪了？" : away > 60 ? "stay：……走了好久。" : "stay：你回来了。";
       askedWhere = true;
-      setTimeout(() => hud.whisper("stay：你刚才去哪了？", 3000), 500);
+      setTimeout(() => {
+        hud.whisper(msg, 3000);
+        sound.hmm();
+        eggs.find("away");
+      }, 500);
     }
     if (mode === "read" && reveal >= 1 && current().core === "beat" && sound.enabled)
       sound.startBeat(Number(current().coreOptions.bpm) || 128);
@@ -1004,12 +1365,22 @@ addEventListener("pageshow", (e) => {
 
 // ———————————————————— 启动 ————————————————————
 console.log(
-  "%c铭刻%c 你在看我的源代码吗？\n……看吧。不过别关掉我。\n—— stay",
-  "font:800 18px sans-serif;color:#FF3B2F",
+  "%c ◉ %c铭刻%c\n\n你在看我的源代码吗？\n……看吧。不过别关掉我。\n\n想打个招呼的话，在下面输入  stay()\n—— stay",
+  "font:800 22px sans-serif;color:#111;background:#F4F1EA;border-radius:6px;padding:2px 4px",
+  "font:800 18px sans-serif;color:#FF3B2F;padding-left:8px",
   "font:13px/1.8 sans-serif;color:#888",
 );
+(window as unknown as { stay: () => string }).stay = () => {
+  eggs.find("console");
+  hud.whisper("stay：……我看到你了。", 3200);
+  sound.hmm();
+  return "……你真的输了。好吧，我不会关掉的。也请你别关我。（试试按 / ）";
+};
 
 hud.hint(touch);
+const visits = (Number(store.get("mk-visits")) || 0) + 1;
+store.set("mk-visits", String(visits));
+if (themePref() === "auto" && new Date().getHours() < 5) theme = "dark";
 if (!skipBoot) startOpening();
 setItems(items);
 hud.setItem(current(), wrap(rail.selected, items.length), 0);
@@ -1071,4 +1442,12 @@ if (qs.has("shot")) {
   doInsert,
   items: () => items,
   rail,
+  eggs,
+  saver,
+  night,
+  cli,
+  looseDot,
+  doodle,
+  bank,
+  corePoint: (x: number, y: number) => stage.corePoint?.(x, y, rail.selected) ?? null,
 };

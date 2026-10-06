@@ -9,6 +9,8 @@ export interface Core {
   draw(g: CanvasRenderingContext2D, size: number, s: CoreState, item: Item): void;
   /** dot 用：进化到新时代时回调（主程序据此放音效） */
   onEra?: (era: number) => void;
+  /** 彩蛋：读取时点了核心。u、v = 点在贴图上的位置（0..1，左上为原点），t = 页面时钟；返回这盒被点了第几下 */
+  poke?: (u: number, v: number, t: number) => number;
 }
 
 export function plate(g: CanvasRenderingContext2D, size: number, theme: Theme, wellBg: string | CanvasGradient) {

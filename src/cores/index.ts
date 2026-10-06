@@ -101,6 +101,11 @@ export class CoreBank {
     this.heroVersion++;
   }
 
+  /** 彩蛋：点了选中那盒的核心；返回这是第几下（核心不接受点按时为 0） */
+  poke(item: Item, u: number, v: number, t: number) {
+    return this.core(this.heroCores, item).poke?.(u, v, t) ?? 0;
+  }
+
   drawAtlas(state: (item: Item) => CoreState) {
     const g = this.ag,
       T = this.tile;

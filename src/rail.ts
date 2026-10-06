@@ -22,6 +22,8 @@ export class Rail {
   private lastMotion = -Infinity;
   dragging = false;
   moved = false;
+  /** 最近一次松手时的速度（卡位/秒，触屏换算前），彩蛋「轻拿轻放」用 */
+  throwV = 0;
   private readonly friction = 2.4;
 
   constructor(slot = 0) {
@@ -58,6 +60,7 @@ export class Rail {
         : null;
     this.samples = [{ v: this.pos, t }];
     this.lastMotion = -Infinity;
+    this.throwV = 0;
   }
 
   dragMove(x: number, y: number, t: number) {
@@ -105,6 +108,7 @@ export class Rail {
     if (!reduced && first && last && t - this.lastMotion <= 80 && last.t - first.t >= 8)
       v = ((last.v - first.v) * 1000) / (last.t - first.t);
     v = Math.max(-24, Math.min(24, v));
+    this.throwV = v;
     const moved = this.pos - this.start.pos;
     if (paging) {
       v *= 0.42;

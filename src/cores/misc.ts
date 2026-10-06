@@ -1,8 +1,20 @@
 // 空白卡带「下一盒」、通用核心（新游戏不写代码也能用）、彩蛋卡带「入口本身」
 import { beatOf, inWell, MONO, plate, rgba, type Core } from "./common";
+import { doodle } from "./doodle";
+
+const NO_DATA = ["NO DATA", "NO DATA", "NO DATA", "STILL NO DATA", "STILL NO DATA", "REALLY.", "…OK FINE"];
 
 export function blankCore(): Core {
+  // 彩蛋：连点 7 下，"真的什么都没有……好吧"，然后可以在里面画画
+  let pokes = 0;
+  const ripples: { u: number; v: number; t: number }[] = [];
   return {
+    poke(u, v, t) {
+      pokes++;
+      ripples.push({ u, v, t });
+      if (ripples.length > 8) ripples.shift();
+      return pokes;
+    },
     draw(g, S, s) {
       const dark = s.theme === "dark";
       plate(g, S, s.theme, dark ? "#1B2129" : "#CBD2D9");
@@ -32,8 +44,24 @@ export function blankCore(): Core {
           g.fillStyle = ink;
           g.font = `600 ${Math.round(S * 0.042)}px ${MONO}`;
           g.textAlign = "center";
-          g.fillText("NO DATA", c, c + R * 0.78);
+          const on = doodle.enabled;
+          g.fillText(on ? (doodle.has ? "" : "DRAW HERE") : NO_DATA[Math.min(pokes, NO_DATA.length - 1)], c, c + R * 0.78);
           g.textAlign = "start";
+          for (const r of ripples) {
+            const k = (s.t - r.t) / 0.7;
+            if (k < 0 || k > 1) continue;
+            g.strokeStyle = dark ? `rgba(230,236,242,${0.6 * (1 - k)})` : `rgba(20,26,34,${0.5 * (1 - k)})`;
+            g.lineWidth = S * 0.006;
+            g.beginPath();
+            g.arc(r.u * S, r.v * S, S * (0.02 + 0.12 * k), 0, Math.PI * 2);
+            g.stroke();
+          }
+          if (on && doodle.has) {
+            // 有画就盖住虚线圈和十字，只留画
+            g.fillStyle = dark ? "#1B2129" : "#CBD2D9";
+            g.fillRect(c - R, c - R, 2 * R, 2 * R);
+          }
+          if (doodle.has) g.drawImage(doodle.canvas, 0, 0, S, S);
         },
         0.18,
       );
@@ -78,43 +106,81 @@ export function genericCore(): Core {
   };
 }
 
-/** 彩蛋：卡带里装着一盒小卡带，小卡带里有一个红点 */
+/** 彩蛋「入口本身」：卡带里装着一盒小卡带，小卡带里还有一盒……点一下钻进去一层，最里面是一个红点 */
+export const DIVE_MAX = 6;
 export function secretCore(): Core {
+  let depth = 0; // 目标层数
+  let z = 0; // 平滑后的层数
+  const K = 0.36; // 里面那盒相对外面的大小
   return {
+    poke() {
+      if (depth < DIVE_MAX) depth++;
+      else depth = 0; // 到底了再点：浮回最外层
+      return depth;
+    },
     draw(g, S, s) {
       plate(g, S, s.theme, "#0C0E12");
+      z += (depth - z) * (s.reduced ? 1 : 1 - Math.exp(-Math.min(0.1, s.dt) * (depth < z ? 3 : 4.5)));
       inWell(g, S, (c, R) => {
-        const turn = s.reduced ? 0.6 : Math.cos(s.t * 0.8);
-        const w = R * 0.5 * Math.max(0.08, Math.abs(turn)),
-          h = R * 0.6;
-        const x0 = c - w,
-          y0 = c - h,
-          ch = Math.min(w, h) * 0.3;
-        g.strokeStyle = "#E8EBEE";
-        g.lineWidth = S * 0.012;
-        g.lineJoin = "round";
-        g.beginPath();
-        const right = turn >= 0;
-        g.moveTo(x0, y0);
-        g.lineTo(right ? x0 + 2 * w - ch : x0 + 2 * w, y0);
-        if (right) g.lineTo(x0 + 2 * w, y0 + ch);
-        g.lineTo(x0 + 2 * w, y0 + 2 * h);
-        g.lineTo(x0, y0 + 2 * h);
-        g.closePath();
-        g.stroke();
-        g.fillStyle = "#FF3B2F";
-        g.beginPath();
-        g.arc(c, c - h * 0.25, Math.min(w, R * 0.12), 0, Math.PI * 2);
-        g.fill();
+        // 背景：一圈慢慢转的红色光点
         g.globalCompositeOperation = "lighter";
         for (let i = 0; i < 18; i++) {
           const a = s.t * 0.7 + i * 0.35;
-          const x = c + Math.cos(a) * R * 0.82,
-            y = c + Math.sin(a) * R * 0.82;
+          const x = c + Math.cos(a) * R * 0.86,
+            y = c + Math.sin(a) * R * 0.86;
           g.fillStyle = `rgba(255,59,47,${0.15 + 0.6 * (i / 18)})`;
           g.fillRect(x - 1.5, y - 1.5, 3, 3);
         }
         g.globalCompositeOperation = "source-over";
+        // 第 L 层的卡带大小 = 基准 × K^(L - z)；只画看得见的几层
+        const base = R * 0.62;
+        const sway = s.reduced ? 0 : Math.sin(s.t * 0.8) * 0.06;
+        const L0 = Math.max(0, Math.floor(z) - 1);
+        for (let L = L0; L <= Math.min(DIVE_MAX, L0 + 5); L++) {
+          const h = base * Math.pow(K, L - z);
+          if (h > R * 8 || h < 1.5) continue;
+          const last = L === DIVE_MAX;
+          const w = h * 0.84;
+          g.save();
+          g.translate(c, c + h * 0.05);
+          g.rotate(sway * (L % 2 ? -1 : 1));
+          const x0 = -w,
+            y0 = -h,
+            ch = w * 0.34;
+          g.strokeStyle = L % 2 ? "#FF3B2F" : "#E8EBEE";
+          g.lineWidth = Math.max(1, Math.min(S * 0.012, h * 0.03));
+          g.lineJoin = "round";
+          g.beginPath();
+          g.moveTo(x0, y0);
+          g.lineTo(x0 + 2 * w - ch, y0);
+          g.lineTo(x0 + 2 * w, y0 + ch);
+          g.lineTo(x0 + 2 * w, y0 + 2 * h);
+          g.lineTo(x0, y0 + 2 * h);
+          g.closePath();
+          g.stroke();
+          // 贴签
+          g.globalAlpha = 0.5;
+          g.fillStyle = g.strokeStyle;
+          g.fillRect(x0 + w * 0.18, y0 + h * 1.66, w * 0.7, h * 0.08);
+          g.globalAlpha = 1;
+          if (last) {
+            // 最里面：开场那个红点
+            g.fillStyle = "#FF3B2F";
+            g.shadowColor = "#FF3B2F";
+            g.shadowBlur = h * 0.3;
+            g.beginPath();
+            g.arc(0, -h * 0.05, h * 0.3 * (s.reduced ? 1 : 1 + 0.06 * Math.sin(s.t * 3)), 0, Math.PI * 2);
+            g.fill();
+            g.shadowBlur = 0;
+          }
+          g.restore();
+        }
+        // 层数
+        g.fillStyle = "rgba(232,235,238,0.75)";
+        g.font = `600 ${Math.round(S * 0.036)}px ${MONO}`;
+        g.textAlign = "center";
+        g.fillText(depth ? `LAYER ${depth} / ${DIVE_MAX}` : "TAP TO ENTER", c, c + R * 0.9 - S * 0.02);
+        g.textAlign = "start";
       });
     },
   };

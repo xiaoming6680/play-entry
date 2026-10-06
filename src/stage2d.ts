@@ -233,6 +233,14 @@ class Stage2D implements Stage {
   focusRect() {
     return this.focus;
   }
+  corePoint(x: number, y: number, slot: number) {
+    const el = this.deck.querySelector<HTMLElement>(`.c2[data-slot="${slot}"] .c2-core`);
+    if (!el) return null;
+    const r = el.getBoundingClientRect();
+    const u = (x - r.left) / r.width,
+      v = (y - r.top) / r.height;
+    return u >= 0 && u <= 1 && v >= 0 && v <= 1 ? { u, v } : null;
+  }
   /** 开场「推近」用：选中卡片正面的四个角（左上、右上、右下、左下） */
   faceQuad() {
     const r = this.focus;

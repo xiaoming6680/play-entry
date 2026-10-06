@@ -138,6 +138,8 @@ export interface Stage {
   pick(x: number, y: number): Pick | null;
   /** 选中卡带在屏幕上的外框（取景框用） */
   focusRect(): Rect | null;
+  /** 读取时：屏幕上的点落在选中卡带核心贴图的哪里（u、v 为 0..1，左上为原点）；不在卡带上为 null */
+  corePoint?(x: number, y: number, slot: number): { u: number; v: number } | null;
   /** 卡槽在屏幕上的位置（插入转场的起点） */
   dispose(): void;
 }

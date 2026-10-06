@@ -1,4 +1,5 @@
 /* 铭刻 · 卡带库 —— 主样式。关键首屏样式（配色变量、开场）内联在 index.html。 */
+@import "./eggs.css";
 @font-face {
   font-family: "JBM";
   src: url("../fonts/jbm-400.woff2") format("woff2");

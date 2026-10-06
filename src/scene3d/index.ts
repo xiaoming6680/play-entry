@@ -721,6 +721,25 @@ class Scene3D implements Stage {
     });
   }
 
+  /** 读取时屏幕点 → 核心贴图坐标：射线和核心板所在平面（玻璃后 0.24 × 0.68，与着色器视差一致）求交 */
+  corePoint(x: number, y: number) {
+    const i = this.readIndex;
+    if (i < 0) return null;
+    this.ray.setFromCamera(new Vector2((x / this.w) * 2 - 1, -(y / this.h) * 2 + 1), this.camera);
+    this.mesh.getMatrixAt(i, this.m4);
+    this.m4.premultiply(this.mesh.matrixWorld).invert();
+    const o = this.ray.ray.origin.clone().applyMatrix4(this.m4);
+    const d = this.ray.ray.origin.clone().add(this.ray.ray.direction).applyMatrix4(this.m4).sub(o);
+    const zPlane = DIM.T / 2 - 0.24 * 0.68;
+    if (Math.abs(d.z) < 1e-6) return null;
+    const k = (zPlane - o.z) / d.z;
+    const px = o.x + d.x * k,
+      py = o.y + d.y * k;
+    const u = (px + 1.5) / 3,
+      v = 1 - (py - 0.64) / 3;
+    return u >= 0 && u <= 1 && v >= 0 && v <= 1 ? { u, v } : null;
+  }
+
   private screenOf(x: number, y: number, z: number) {
     this.v3.set(x, y, z).project(this.camera);
     return { x: (this.v3.x * 0.5 + 0.5) * this.w, y: (-this.v3.y * 0.5 + 0.5) * this.h };

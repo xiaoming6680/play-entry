@@ -1,6 +1,6 @@
 // dot · 从一个点开始：磨砂时只有一个像素；读取时随读卡头一层层进化：
 // 终端 → 黑白矢量 → 8-bit → 16-bit → 辉光 → 3D；清晰后停在 3D，再缩回一个点重新开始。
-import { inWell, MONO, plate, type Core } from "./common";
+import { hash, inWell, MONO, plate, type Core } from "./common";
 
 const ERA_TIME = 1.5;
 const HOLD_3D = 4.5;
@@ -9,7 +9,16 @@ export function dotCore(): Core {
   let era = -1;
   let flashT = -10;
   let clearSince = -1;
+  // 彩蛋：读取时一直点它，就成了一个放置游戏（每点一下多一个点）
+  let clicks = 0;
+  const pops: { u: number; v: number; t: number }[] = [];
   const core: Core = {
+    poke(u, v, t) {
+      clicks++;
+      pops.push({ u, v, t });
+      if (pops.length > 24) pops.shift();
+      return clicks;
+    },
     draw(g, S, s) {
       plate(g, S, s.theme, "#020403");
       // —— 现在该是哪个时代 ——
@@ -80,12 +89,42 @@ export function dotCore(): Core {
             g.fillStyle = `rgba(255,255,255,${0.75 * f})`;
             g.fillRect(L, T, W, W);
           }
+          if (clicks > 0) idleLayer(g, S, c, R, s.t, clicks, pops);
         },
         0.4,
       );
     },
   };
   return core;
+}
+
+/** 点出来的点：绕着核心慢慢转；点的地方冒 +1；顶上是计数 */
+function idleLayer(g: CanvasRenderingContext2D, S: number, c: number, R: number, t: number, n: number, pops: { u: number; v: number; t: number }[]) {
+  const shown = Math.min(n, 160);
+  g.fillStyle = "#3BFF6E";
+  for (let i = 0; i < shown; i++) {
+    const r = R * (0.25 + 0.68 * hash(i * 3.1));
+    const a = hash(i * 7.7) * Math.PI * 2 + t * (0.15 + 0.35 * hash(i + 0.5)) * (i % 2 ? 1 : -1);
+    const p = Math.max(2, S * (0.006 + 0.006 * hash(i * 1.3)));
+    g.globalAlpha = 0.45 + 0.5 * hash(i * 9.1);
+    g.fillRect(Math.round(c + Math.cos(a) * r - p / 2), Math.round(c + Math.sin(a) * r - p / 2), Math.round(p), Math.round(p));
+  }
+  g.globalAlpha = 1;
+  g.font = `700 ${Math.round(S * 0.05)}px ${MONO}`;
+  g.textAlign = "center";
+  g.textBaseline = "middle";
+  for (const p of pops) {
+    const k = (t - p.t) / 0.9;
+    if (k < 0 || k > 1) continue;
+    g.fillStyle = `rgba(255,210,59,${1 - k})`;
+    g.fillText("+1", p.u * S, p.v * S - k * S * 0.08);
+  }
+  g.fillStyle = "rgba(2,4,3,0.7)";
+  g.fillRect(c - R * 0.42, c - R * 0.86, R * 0.84, S * 0.07);
+  g.fillStyle = "#3BFF6E";
+  g.font = `700 ${Math.round(S * 0.042)}px ${MONO}`;
+  g.fillText(`${n} DOT${n > 1 ? "S" : ""}`, c, c - R * 0.86 + S * 0.035);
+  g.textAlign = "start";
 }
 
 function pixel(g: CanvasRenderingContext2D, S: number, c: number, t: number, reduced: boolean) {
