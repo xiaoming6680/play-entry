@@ -4,7 +4,8 @@
 // 这样 dist/index.html 双击（file://）也能打开，放到 Cloudflare Pages 根路径也一样。
 import { build } from "vite";
 import { fileURLToPath } from "node:url";
-import { readdirSync, statSync, readFileSync } from "node:fs";
+import { readdirSync, statSync, readFileSync, writeFileSync } from "node:fs";
+import { createHash } from "node:crypto";
 import { gzipSync } from "node:zlib";
 import { join } from "node:path";
 import { siteHtml } from "./site-html.mjs";
@@ -49,6 +50,24 @@ await build({
     },
   },
 });
+
+// 防缓存：assets 下文件名是固定的，而线上会被浏览器缓存 4 小时（HTML 不缓存）。
+// 给每个引用加上内容哈希 ?v=xxxx，内容变了地址就变，普通刷新就能拿到新版。
+// 顺序：先算 scene3d / 字体 → 改进 main.js / main.css → 再算它们自己的哈希 → 改进 index.html
+const A = join(root, "dist/assets");
+const ver = (f) => createHash("sha256").update(readFileSync(join(A, f))).digest("hex").slice(0, 10);
+const stamp = (file, refs) => {
+  let s = readFileSync(file, "utf8");
+  for (const r of refs) {
+    const n = s.split(`./${r}`).length - 1 + s.split(`./assets/${r}`).length - 1;
+    if (!n) throw new Error(`防缓存：${file} 里找不到对 ${r} 的引用`);
+    s = s.replaceAll(`./assets/${r}`, `./assets/${r}?v=${ver(r)}`).replace(new RegExp(`\\./${r.replace(".", "\\.")}(?!\\?)`, "g"), `./${r}?v=${ver(r)}`);
+  }
+  writeFileSync(file, s);
+};
+stamp(join(A, "main.js"), ["scene3d.js"]);
+stamp(join(A, "main.css"), ["jbm-400.woff2", "jbm-700.woff2"]);
+stamp(join(root, "dist/index.html"), ["main.js", "main.css"]);
 
 // 体积报告（gzip 后）
 const walk = (dir) =>
