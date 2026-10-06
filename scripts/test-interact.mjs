@@ -99,7 +99,7 @@ const log = (...a) => console.log(...a);
   await p.keyboard.press("Enter");
   await sleep(1400);
   await p.screenshot({ path: out + "/i-desk-launch.png" });
-  await sleep(1500);
+  await sleep(3000); // 转场 v0.4 约 1.7 秒，加上插入和终端行
   log("after launch url", p.url());
   await ctx.close();
 }
