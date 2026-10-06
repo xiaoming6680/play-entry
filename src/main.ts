@@ -298,7 +298,9 @@ async function doInsert() {
       12,
     );
     const r = document.getElementById("slot")!.getBoundingClientRect();
-    await playLaunch(document.getElementById("launch") as HTMLCanvasElement, item, { x: r.left + r.width / 2, y: r.top }, reduced());
+    await playLaunch(document.getElementById("launch") as HTMLCanvasElement, item, { x: r.left + r.width / 2, y: r.top }, reduced(), (name, n) =>
+      sound.launchCue(item.core, name, n),
+    );
     location.href = item.url!;
     return;
   }

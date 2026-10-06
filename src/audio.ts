@@ -268,6 +268,43 @@ export class Sound {
     [523.25, 659.25, 783.99, 1046.5].forEach((f, i) => this.osc("triangle", f, t + i * 0.06, 0.5, 0.05, this.sfx!));
   }
 
+  /** 进入转场里的每一下（launch.ts 按时间点调用） */
+  launchCue(core: string, name: string, n?: number) {
+    if (!this.ready) return;
+    const t = this.ctx!.currentTime;
+    const out = this.sfx!;
+    if (core === "beat") {
+      if (name === "kick") {
+        this.osc("sine", 160, t, 0.32, 0.5, out, 40, 0.002);
+        this.noise(t, 0.03, 0.08, "lowpass", 2400, out);
+        this.osc("sawtooth", 55, t, 0.4, 0.05, out, undefined, 0.006);
+      } else if (name === "hat") this.noise(t, 0.06, 0.07, "highpass", 8000, out);
+      else if (name === "rise") this.noise(t, 0.5, 0.05, "bandpass", 500, out, 6000, 1.4);
+      else if (name === "drop") {
+        this.osc("sine", 110, t, 0.9, 0.35, out, 30, 0.002);
+        this.noise(t, 1.1, 0.06, "highpass", 5000, out);
+        [440, 554.4, 659.3, 880].forEach((f) => this.osc("sawtooth", f, t, 0.7, 0.018, out, undefined, 0.01));
+      }
+    } else if (core === "stay") {
+      if (name === "wipe") this.noise(t, 0.4, 0.03, "bandpass", 900, out, 2200, 0.8);
+      else if (name === "open") this.osc("sine", 392, t, 0.5, 0.05, out, 587, 0.03);
+      else if (name === "look") this.osc("sine", 1400, t, 0.05, 0.02, out, 1100);
+      else if (name === "blink") {
+        this.noise(t, 0.03, 0.04, "bandpass", 3000, out);
+        this.noise(t + 0.09, 0.03, 0.03, "bandpass", 2600, out);
+      } else if (name === "dive") {
+        this.osc("sine", 220, t, 0.45, 0.08, out, 55, 0.2);
+        this.noise(t, 0.4, 0.04, "lowpass", 1600, out, 200);
+      } else if (name === "wake") [523.3, 659.3, 784, 1046.5].forEach((f, i) => this.osc("sine", f, t + i * 0.04, 1.4, 0.035, out, undefined, 0.05));
+    } else if (core === "dot") {
+      if (name === "wipe") this.osc("square", 220, t, 0.18, 0.025, out, 110);
+      else if (name === "cursor") this.osc("square", 880, t, 0.05, 0.03, out);
+      else if (name === "era") this.era(n ?? 0);
+      else if (name === "shrink") this.osc("square", 660, t, 0.22, 0.03, out, 110);
+      else if (name === "off") this.osc("square", 1760, t, 0.04, 0.025, out);
+    }
+  }
+
   empty() {
     if (!this.ready) return;
     const t = this.ctx!.currentTime;

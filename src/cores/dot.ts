@@ -59,31 +59,7 @@ export function dotCore(): Core {
           const L = c - R,
             T = c - R,
             W = 2 * R;
-          switch (era) {
-            case 0:
-              terminal(g, S, c, R, local);
-              break;
-            case 1:
-              vector(g, S, c, R, local);
-              break;
-            case 2:
-              bit8(g, L, T, W, local);
-              break;
-            case 3:
-              bit16(g, L, T, W, c, R, local);
-              break;
-            case 4:
-              glow(g, c, R, local);
-              break;
-            case 5:
-              cube3d(g, S, c, R, local, 1);
-              break;
-            case -2:
-              cube3d(g, S, c, R, local, 1 - shrink);
-              break;
-            default:
-              pixel(g, S, c, s.t, s.reduced);
-          }
+          drawEra(g, S, c, R, era, local, shrink, s.t, s.reduced);
           const f = 1 - (s.t - flashT) / 0.14;
           if (f > 0) {
             g.fillStyle = `rgba(255,255,255,${0.75 * f})`;
@@ -96,6 +72,38 @@ export function dotCore(): Core {
     },
   };
   return core;
+}
+
+/** 画某个时代的一帧（-1 是一个点，-2 是 3D 正在缩回去）；进入转场也用它 */
+export function drawEra(g: CanvasRenderingContext2D, S: number, c: number, R: number, era: number, local: number, shrink = 0, t = local, reduced = false) {
+  const L = c - R,
+    T = c - R,
+    W = 2 * R;
+  switch (era) {
+    case 0:
+      terminal(g, S, c, R, local);
+      break;
+    case 1:
+      vector(g, S, c, R, local);
+      break;
+    case 2:
+      bit8(g, L, T, W, local);
+      break;
+    case 3:
+      bit16(g, L, T, W, c, R, local);
+      break;
+    case 4:
+      glow(g, c, R, local);
+      break;
+    case 5:
+      cube3d(g, S, c, R, local, 1);
+      break;
+    case -2:
+      cube3d(g, S, c, R, local, 1 - shrink);
+      break;
+    default:
+      pixel(g, S, c, t, reduced);
+  }
 }
 
 /** 点出来的点：绕着核心慢慢转；点的地方冒 +1；顶上是计数 */
